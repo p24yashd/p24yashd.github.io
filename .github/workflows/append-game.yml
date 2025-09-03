@@ -4,6 +4,10 @@ on:
   issues:
     types: [opened]
 
+permissions:
+  issues: write
+  contents: write
+
 jobs:
   append:
     if: startsWith(github.event.issue.title, 'GameData:')
@@ -27,8 +31,6 @@ jobs:
         run: node .github/scripts/appendExcel.js
 
       - name: Commit and push changes
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Action"
@@ -40,4 +42,4 @@ jobs:
         uses: peter-evans/close-issue@v2
         with:
           issue-number: ${{ github.event.issue.number }}
-          comment: "Game data saved and issue closed ✅"
+          comment: "✅ Game data saved and issue closed"
