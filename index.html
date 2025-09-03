@@ -58,8 +58,8 @@
     // ---------------- CONFIG ----------------
     const GITHUB_USER = "p24yashd";               // your GitHub username
     const REPO_NAME   = "p24yashd.github.io";     // repo with workflows + Excel
-    const BRANCH      = "main";                   // or "master" if that's your default
-    const TOKEN       = "ghp_yourFineGrainedIssuesTokenHere"; // PAT with Issues: Read/Write
+    const BRANCH      = "main";                   // or "master" if that's your default branch
+    const TOKEN       = "github_pat_xxx...";      // fine-grained PAT with Issues: Read/Write
 
     // ------------- Game Variables -----------
     let rounds = 10;
@@ -160,7 +160,8 @@
         {
           method: "POST",
           headers: {
-            "Accept": "application/vnd.github+json"
+            "Accept": "application/vnd.github+json",
+            "Authorization": `Bearer ${TOKEN}`
           },
           body: JSON.stringify(payload)
         }
