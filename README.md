@@ -1,8 +1,8 @@
-
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>War Variant</title>
+  <title>War Variant with Demographics</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
@@ -36,14 +36,14 @@
     <p>Rounds left: <span id="rounds">10</span></p>
     <p>Your Score: <span id="playerScore">0</span> | Computer Score: <span id="compScore">0</span></p>
 
-    <button onclick="dealCards()">Deal Cards</button>
+    <button id="dealBtn" onclick="dealCards()">Deal Card</button>
 
+    <div id="current"></div>
     <div id="choiceBtns">
       <button onclick="resolveRound(true)">Play</button>
       <button onclick="resolveRound(false)">Skip</button>
     </div>
 
-    <div id="current"></div>
     <div id="log"></div>
   </div>
 
@@ -90,9 +90,11 @@
 
       document.getElementById("current").innerHTML = 
         `<p>Round ${currentRound}:<br>
-        Your Card: <b>${currentPlayerCard}</b> | Computer's Card: <b>${currentCompCard}</b></p>`;
+        Your Card: <b>${currentPlayerCard}</b><br>
+        Computer's Card: <i>Hidden until you decide</i></p>`;
 
       document.getElementById("choiceBtns").style.display = "block";
+      document.getElementById("dealBtn").style.display = "none";
     }
 
     function resolveRound(playerPlays) {
@@ -116,6 +118,7 @@
       flatResults[`PlayerChoice${currentRound}`] = playerPlays ? "Play" : "Skip";
       flatResults[`PlayerCard${currentRound}`] = playerPlays ? currentPlayerCard : "Skipped";
       flatResults[`ComputerCard${currentRound}`] = currentCompCard;
+      flatResults[`Outcome${currentRound}`] = outcome;
 
       // Save detailed log
       results.push({
@@ -135,13 +138,16 @@
       document.getElementById("compScore").innerText = compScore;
 
       const log = document.getElementById("log");
-      log.innerHTML += `<p>Round ${currentRound}: You ${playerPlays ? "played " + currentPlayerCard : "skipped"} | Computer ${currentCompCard} → ${outcome}</p>`;
+      log.innerHTML += `<p>Round ${currentRound}: You ${playerPlays ? "played " + currentPlayerCard : "skipped"} | 
+        Computer ${currentCompCard} → ${outcome}</p>`;
 
       document.getElementById("choiceBtns").style.display = "none";
+      document.getElementById("dealBtn").style.display = "inline-block";
       document.getElementById("current").innerHTML = "";
 
       if (rounds === 0) {
         document.getElementById("export").style.display = "block";
+        document.getElementById("dealBtn").style.display = "none";
       }
     }
 
