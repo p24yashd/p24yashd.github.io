@@ -1,14 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>War Variant Experiment (via Issues)</title>
+  <meta charset="UTF-8" />
+  <title>War Variant Experiment (Issues trigger, no secrets)</title>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
-    button { margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 32px; }
+    button { margin: 8px; padding: 10px 18px; font-size: 16px; cursor: pointer; }
     #game, #choiceBtns, #finalActions { display: none; }
-    #log { margin-top: 20px; max-height: 250px; overflow-y: auto; }
-    #status { margin-top: 15px; font-weight: bold; color: green; }
+    #log { margin: 16px auto; max-width: 720px; text-align: left; max-height: 280px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 8px; }
+    #status { margin-top: 14px; font-weight: bold; color: #0a7a0a; }
   </style>
 </head>
 <body>
@@ -18,8 +18,8 @@
   <div id="form">
     <h3>Participant Information</h3>
     <label>Name: <input type="text" id="name"></label><br><br>
-    <label>Age: <input type="number" id="age"></label><br><br>
-    <label>Gender: 
+    <label>Age: <input type="number" id="age" min="1"></label><br><br>
+    <label>Gender:
       <select id="gender">
         <option value="">--Select--</option>
         <option>Male</option>
@@ -39,6 +39,7 @@
     <button id="dealBtn" onclick="dealCards()">Deal Card</button>
 
     <div id="current"></div>
+
     <div id="choiceBtns">
       <button onclick="resolveRound(true)">Play</button>
       <button onclick="resolveRound(false)">Skip</button>
@@ -49,19 +50,18 @@
 
   <!-- Final Actions -->
   <div id="finalActions">
-    <button onclick="uploadToGitHub()">Save Data</button>
+    <button onclick="openIssue()">Save Data</button>
     <p id="status"></p>
     <button id="downloadBtn" onclick="downloadWorkbook()" style="display:none;">Download Workbook</button>
   </div>
 
   <script>
-    // ---------------- CONFIG ----------------
+    // ------------- CONFIG -------------
     const GITHUB_USER = "p24yashd";               // your GitHub username
-    const REPO_NAME   = "p24yashd.github.io";     // repo with workflows + Excel
-    const BRANCH      = "main";                   // or "master" if that's your default branch
-    const TOKEN       = "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";      // fine-grained PAT with Issues: Read/Write
+    const REPO_NAME   = "p24yashd.github.io";     // repo with workflow + Excel
+    const BRANCH      = "main";                   // or "master" if that's your default
 
-    // ------------- Game Variables -----------
+    // ------------- Game State -------------
     let rounds = 10;
     let playerScore = 0, compScore = 0;
     let flatResults = {};
@@ -70,10 +70,9 @@
     let currentPlayerCard = null, currentCompCard = null;
     let currentRound = 0;
 
-    // ------------- Game Logic ---------------
     function startGame() {
-      const name = document.getElementById("name").value;
-      const age = document.getElementById("age").value;
+      const name = document.getElementById("name").value.trim();
+      const age = document.getElementById("age").value.trim();
       const gender = document.getElementById("gender").value;
 
       if (!name || !age || !gender) {
@@ -95,12 +94,13 @@
       currentPlayerCard = Math.floor(Math.random() * 10) + 1;
       currentCompCard = Math.floor(Math.random() * 10) + 1;
 
-      document.getElementById("current").innerHTML = 
-        `<p>Round ${currentRound}:<br>
-        Your Card: <b>${currentPlayerCard}</b><br>
-        Computer's Card: <i>Hidden</i></p>`;
+      // Show ONLY player's card now; computer's remains hidden until choice
+      document.getElementById("current").innerHTML =
+        `<p><strong>Round ${currentRound}</strong><br>
+        Your card: <b>${currentPlayerCard}</b><br>
+        Computer's card: <i>Hidden</i></p>`;
 
-      document.getElementById("choiceBtns").style.display = "block";
+      document.getElementById("choiceBtns").style.display = "inline-block";
       document.getElementById("dealBtn").style.display = "none";
     }
 
@@ -121,66 +121,62 @@
         }
       }
 
-      flatResults[`PlayerChoice${currentRound}`] = playerPlays ? "Play" : "Skip";
-      flatResults[`PlayerCard${currentRound}`] = playerPlays ? currentPlayerCard : "Skipped";
-      flatResults[`ComputerCard${currentRound}`] = currentCompCard;
-      flatResults[`Outcome${currentRound}`] = outcome;
+      // Record flat results
+      flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
+      flatResults[`PlayerCard${currentRound}`]    = playerPlays ? currentPlayerCard : "Skipped";
+      flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
+      flatResults[`Outcome${currentRound}`]       = outcome;
 
       rounds--;
       document.getElementById("rounds").innerText = rounds;
       document.getElementById("playerScore").innerText = playerScore;
       document.getElementById("compScore").innerText = compScore;
 
+      // Reveal BOTH cards + outcome immediately after decision
+      document.getElementById("current").innerHTML =
+        `<p><strong>Round ${currentRound}</strong><br>
+        Your card: <b>${currentPlayerCard}</b> &nbsp; | &nbsp; Computer's card: <b>${currentCompCard}</b><br>
+        Outcome: <b>${outcome}</b><br>
+        Score — You: <b>${playerScore}</b> | Computer: <b>${compScore}</b></p>`;
+
+      // Append to running log
       const log = document.getElementById("log");
-      log.innerHTML += `<p>Round ${currentRound}: You ${playerPlays ? "played " + currentPlayerCard : "skipped"} | 
-        Computer ${currentCompCard} → ${outcome}</p>`;
+      log.innerHTML += `<p>Round ${currentRound}: You ${playerPlays ? "played " + currentPlayerCard : "skipped"} | Computer ${currentCompCard} → ${outcome}</p>`;
 
       document.getElementById("choiceBtns").style.display = "none";
       document.getElementById("dealBtn").style.display = "inline-block";
-      document.getElementById("current").innerHTML = "";
 
       if (rounds === 0) {
         document.getElementById("finalActions").style.display = "block";
         document.getElementById("dealBtn").style.display = "none";
+        document.getElementById("current").innerHTML = `<p><b>Game complete.</b> Click “Save Data” to open a GitHub Issue and store your results.</p>`;
       }
     }
 
-    // ----------- Save Game Data via Issue --------
-    async function uploadToGitHub() {
-      const payload = {
-        title: `GameData: ${gameId}`,
-        body: JSON.stringify({
-          demographics: { GameID: gameId, ...demographics },
-          gameRow: { GameID: gameId, ...flatResults }
-        }, null, 2)
+    // -------- Save via pre-filled GitHub Issue (no tokens needed) --------
+    function openIssue() {
+      const issueTitle = `GameData: ${gameId}`;
+      const bodyObj = {
+        demographics: { GameID: gameId, ...demographics },
+        gameRow: { GameID: gameId, ...flatResults }
       };
 
-      const response = await fetch(
-        `https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/issues`,
-        {
-          method: "POST",
-          headers: {
-            "Accept": "application/vnd.github+json",
-            "Authorization": `Bearer ${TOKEN}`
-          },
-          body: JSON.stringify(payload)
-        }
-      );
+      const issueBody = encodeURIComponent(JSON.stringify(bodyObj, null, 2));
+      const url = `https://github.com/${GITHUB_USER}/${REPO_NAME}/issues/new?title=${encodeURIComponent(issueTitle)}&body=${issueBody}`;
 
-      if (response.ok) {
-        document.getElementById("status").innerText =
-          "Game Data Saved (queued via GitHub Issue)";
-        document.getElementById("downloadBtn").style.display = "inline-block";
-      } else {
-        const err = await response.json();
-        document.getElementById("status").innerText =
-          "❌ Failed to save data: " + (err.message || "");
-      }
+      window.open(url, "_blank", "noopener");
+      document.getElementById("status").innerText =
+        "A GitHub Issue draft opened in a new tab. Click “Submit new issue” there to save your data.";
+      document.getElementById("downloadBtn").style.display = "inline-block";
     }
 
-    // ----------- Download Workbook ----------
+    // -------- Download latest workbook from repo --------
     async function downloadWorkbook() {
       const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/${BRANCH}/data/war_game.xlsx`);
+      if (!res.ok) {
+        alert("Couldn't fetch workbook yet. Wait a moment after submitting the Issue, then try again.");
+        return;
+      }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -189,6 +185,7 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
     }
   </script>
 </body>
