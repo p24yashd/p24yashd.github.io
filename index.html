@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>War Variant Experiment (Issues trigger, no secrets)</title>
+  <title>War Variant Experiment</title>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin-top: 32px; }
     button { margin: 8px; padding: 10px 18px; font-size: 16px; cursor: pointer; }
@@ -56,12 +56,12 @@
   </div>
 
   <script>
-    // ------------- CONFIG -------------
-    const GITHUB_USER = "p24yashd";               // your GitHub username
-    const REPO_NAME   = "p24yashd.github.io";     // repo with workflow + Excel
-    const BRANCH      = "main";                   // or "master" if that's your default
+    // -------- CONFIG --------
+    const GITHUB_USER = "p24yashd";               
+    const REPO_NAME   = "p24yashd.github.io";     
+    const BRANCH      = "main";                   
 
-    // ------------- Game State -------------
+    // -------- Game State --------
     let rounds = 10;
     let playerScore = 0, compScore = 0;
     let flatResults = {};
@@ -94,7 +94,6 @@
       currentPlayerCard = Math.floor(Math.random() * 10) + 1;
       currentCompCard = Math.floor(Math.random() * 10) + 1;
 
-      // Show ONLY player's card now; computer's remains hidden until choice
       document.getElementById("current").innerHTML =
         `<p><strong>Round ${currentRound}</strong><br>
         Your card: <b>${currentPlayerCard}</b><br>
@@ -121,7 +120,6 @@
         }
       }
 
-      // Record flat results
       flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
       flatResults[`PlayerCard${currentRound}`]    = playerPlays ? currentPlayerCard : "Skipped";
       flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
@@ -132,14 +130,11 @@
       document.getElementById("playerScore").innerText = playerScore;
       document.getElementById("compScore").innerText = compScore;
 
-      // Reveal BOTH cards + outcome immediately after decision
       document.getElementById("current").innerHTML =
         `<p><strong>Round ${currentRound}</strong><br>
-        Your card: <b>${currentPlayerCard}</b> &nbsp; | &nbsp; Computer's card: <b>${currentCompCard}</b><br>
-        Outcome: <b>${outcome}</b><br>
-        Score — You: <b>${playerScore}</b> | Computer: <b>${compScore}</b></p>`;
+        Your card: <b>${currentPlayerCard}</b> | Computer's card: <b>${currentCompCard}</b><br>
+        Outcome: <b>${outcome}</b></p>`;
 
-      // Append to running log
       const log = document.getElementById("log");
       log.innerHTML += `<p>Round ${currentRound}: You ${playerPlays ? "played " + currentPlayerCard : "skipped"} | Computer ${currentCompCard} → ${outcome}</p>`;
 
@@ -153,7 +148,7 @@
       }
     }
 
-    // -------- Save via pre-filled GitHub Issue (no tokens needed) --------
+    // -------- Save via pre-filled GitHub Issue --------
     function openIssue() {
       const issueTitle = `GameData: ${gameId}`;
       const bodyObj = {
@@ -170,7 +165,7 @@
       document.getElementById("downloadBtn").style.display = "inline-block";
     }
 
-    // -------- Download latest workbook from repo --------
+    // -------- Download workbook --------
     async function downloadWorkbook() {
       const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/${BRANCH}/data/war_game.xlsx`);
       if (!res.ok) {
