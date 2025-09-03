@@ -1,0 +1,36 @@
+name: Append Game Data
+
+on:
+  workflow_dispatch:
+    inputs:
+      gameData:
+        description: "Game data JSON string"
+        required: true
+
+jobs:
+  append:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install xlsx
+
+      - name: Append data to Excel
+        run: |
+          echo "${{ github.event.inputs.gameData }}" > game.json
+          node .github/scripts/appendExcel.js
+          
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "actions@github.com"
+          git config --local user.name "GitHub Action"
+          git add data/war_game.xlsx
+          git commit -m "Append new game data"
+          git push
