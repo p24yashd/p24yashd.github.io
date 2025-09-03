@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>War Variant with Demographics</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    #game, #export { display: none; }
+    #log { margin-top: 20px; max-height: 250px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <h1>⚔️ War Variant Experiment</h1>
+
+  <!-- Demographics Form -->
+  <div id="form">
+    <h3>Participant Information</h3>
+    <label>Name: <input type="text" id="name"></label><br><br>
+    <label>Age: <input type="number" id="age"></label><br><br>
+    <label>Gender: 
+      <select id="gender">
+        <option value="">--Select--</option>
+        <option>Male</option>
+        <option>Female</option>
+        <option>Other</option>
+      </select>
+    </label><br><br>
+    <button onclick="startGame()">Start Game</button>
+  </div>
+
+  <!-- Game Area -->
+  <div id="game">
+    <p>Unique Game ID: <span id="gameId"></span></p>
+    <p>Rounds left: <span id="rounds">10</span></p>
+    <p>Your Score: <span id="playerScore">0</span> | Computer Score: <span id="compScore">0</span></p>
+
+    <button onclick="playRound(true)">Play</button>
+    <button onclick="playRound(false)">Skip</button>
+
+    <div id="log"></div>
+  </div>
+
+  <!-- Export -->
+  <div id="export">
+    <button onclick="exportExcel()">Download Results (Excel)</button>
+  </div>
+
+  <script>
+    let rounds = 10;
+    let playerScore = 0, compScore = 0;
+    let results = [];
+    let flatResults = {}; // Flattened row for Excel
+    let gameId = "G" + Date.now(); // Unique ID per session
+    let demographics = {};
+
+    function startGame() {
+      const name = document.getElementById("name").value;
+      const age = document.getElementById("age").value;
+      const gender = document.getElementById("gender").value;
+
+      if (!name || !age || !gender) {
+        alert("Please fill all demographic fields.");
+        return;
+      }
+
+      demographics = { GameID: gameId, Name: name, Age: age, Gender: gender };
+
+      document.getElementById("form").style.display = "none";
+      document.getElementById("game").style.display = "block";
+      document.getElementById("gameId").innerText = gameId;
+    }
+
+    function playRound(playerPlays) {
+      if (rounds <= 0) return;
+
+      const roundNum = 11 - rounds;
+      const playerCard = Math.floor(Math.random() * 10) + 1;
+      const compCard = Math.floor(Math.random() * 10) + 1;
+      let outcome = "Skipped";
+
+      if (playerPlays) {
+        if (playerCard > compCard) {
+          playerScore += 10;
+          compScore -= 10;
+          outcome = "You Win!";
+        } else if (playerCard < compCard) {
+          playerScore -= 10;
+          compScore += 10;
+          outcome = "Computer Wins!";
+        } else {
+          outcome = "Draw";
+        }
+      }
+
+      // Save round data in flatResults
+      flatResults[`PlayerChoice${roundNum}`] = playerPlays ? "Play" : "Skip";
+      flatResults[`PlayerCard${roundNum}`] = playerPlays ? playerCard : "Skipped";
+      flatResults[`ComputerCard${roundNum}`] = compCard;
+
+      // Save detailed log
+      results.push({
+        Round: roundNum,
+        PlayerCard: playerPlays ? playerCard : "Skipped",
+        ComputerCard: compCard,
+        PlayerChoice: playerPlays ? "Play" : "Skip",
+        Outcome: outcome,
+        PlayerScore: playerScore,
+        ComputerScore: compScore
+      });
+
+      // Update UI
+      rounds--;
+      document.getElementById("rounds").innerText = rounds;
+      document.getElementById("playerScore").innerText = playerScore;
+      document.getElementById("compScore").innerText = compScore;
+
+      const log = document.getElementById("log");
+      log.innerHTML += `<p>Round ${roundNum}: You ${playerPlays ? "played " + playerCard : "skipped"} | Computer ${compCard} → ${outcome}</p>`;
+
+      if (rounds === 0) {
+        document.getElementById("export").style.display = "block";
+      }
+    }
+
+    function exportExcel() {
+      // Prepare two sheets
+      let gameRow = { GameID: gameId, ...flatResults };
+      let ws1 = XLSX.utils.json_to_sheet([demographics]);
+      let ws2 = XLSX.utils.json_to_sheet([gameRow]);
+
+      let wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws1, "Demographics");
+      XLSX.utils.book_append_sheet(wb, ws2, "GameData");
+
+      XLSX.writeFile(wb, `war_variant_${gameId}.xlsx`);
+    }
+  </script>
+</body>
+</html>
