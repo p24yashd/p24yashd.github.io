@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>War Variant with Demographics</title>
+  <title>War Variant Experiment (with GitHub Logging)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
     button { margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
-    #game, #choiceBtns, #export { display: none; }
+    #game, #choiceBtns { display: none; }
     #log { margin-top: 20px; max-height: 250px; overflow-y: auto; }
   </style>
 </head>
@@ -47,23 +47,29 @@
     <div id="log"></div>
   </div>
 
-  <!-- Export -->
-  <div id="export">
-    <button onclick="exportExcel()">Download Results (Excel)</button>
+  <!-- Finalize -->
+  <div id="export" style="display:none;">
+    <button onclick="uploadToGitHub()">Save to Central Workbook</button>
   </div>
 
   <script>
+    // ---------------- CONFIG ----------------
+    const GITHUB_USER = "YOUR_USERNAME";   // your GitHub username
+    const REPO_NAME = "YOUR_REPO";         // repo where Excel lives
+    const FILE_PATH = "data/war_game.xlsx"; // path in repo
+    const TOKEN = "YOUR_PERSONAL_ACCESS_TOKEN"; // ⚠️ Not safe for public
+
+    // ------------- Game Variables -----------
     let rounds = 10;
     let playerScore = 0, compScore = 0;
     let results = [];
-    let flatResults = {}; // Flattened row for Excel
-    let gameId = "G" + Date.now(); // Unique ID per session
+    let flatResults = {};
+    let gameId = "G" + Date.now();
     let demographics = {};
-
-    let currentPlayerCard = null;
-    let currentCompCard = null;
+    let currentPlayerCard = null, currentCompCard = null;
     let currentRound = 0;
 
+    // ------------- Game Logic ---------------
     function startGame() {
       const name = document.getElementById("name").value;
       const age = document.getElementById("age").value;
@@ -91,7 +97,7 @@
       document.getElementById("current").innerHTML = 
         `<p>Round ${currentRound}:<br>
         Your Card: <b>${currentPlayerCard}</b><br>
-        Computer's Card: <i>Hidden until you decide</i></p>`;
+        Computer's Card: <i>Hidden</i></p>`;
 
       document.getElementById("choiceBtns").style.display = "block";
       document.getElementById("dealBtn").style.display = "none";
@@ -114,13 +120,11 @@
         }
       }
 
-      // Save round data in flatResults
       flatResults[`PlayerChoice${currentRound}`] = playerPlays ? "Play" : "Skip";
       flatResults[`PlayerCard${currentRound}`] = playerPlays ? currentPlayerCard : "Skipped";
       flatResults[`ComputerCard${currentRound}`] = currentCompCard;
       flatResults[`Outcome${currentRound}`] = outcome;
 
-      // Save detailed log
       results.push({
         Round: currentRound,
         PlayerCard: playerPlays ? currentPlayerCard : "Skipped",
@@ -131,7 +135,6 @@
         ComputerScore: compScore
       });
 
-      // Update UI
       rounds--;
       document.getElementById("rounds").innerText = rounds;
       document.getElementById("playerScore").innerText = playerScore;
@@ -151,17 +154,53 @@
       }
     }
 
-    function exportExcel() {
-      // Prepare two sheets
-      let gameRow = { GameID: gameId, ...flatResults };
-      let ws1 = XLSX.utils.json_to_sheet([demographics]);
-      let ws2 = XLSX.utils.json_to_sheet([gameRow]);
+    // ----------- GitHub Excel Update --------
+    async function uploadToGitHub() {
+      const demoRow = { Serial: "", GameID: gameId, ...demographics };
+      const gameRow = { Serial: "", GameID: gameId, ...flatResults };
 
-      let wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws1, "Demographics");
-      XLSX.utils.book_append_sheet(wb, ws2, "GameData");
+      // Fetch current file
+      const res = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/contents/${FILE_PATH}`, {
+        headers: { Authorization: `token ${TOKEN}` }
+      });
+      const data = await res.json();
+      const content = atob(data.content); // base64 decode
 
-      XLSX.writeFile(wb, `war_variant_${gameId}.xlsx`);
+      // Read workbook
+      const wb = XLSX.read(content, { type: "binary" });
+
+      // Demographics sheet
+      const wsDemo = wb.Sheets["Demographics"];
+      const demoJson = XLSX.utils.sheet_to_json(wsDemo, { defval: "" });
+      demoRow.Serial = demoJson.length + 1; // serial number
+      demoJson.push(demoRow);
+      wb.Sheets["Demographics"] = XLSX.utils.json_to_sheet(demoJson);
+
+      // GameData sheet
+      const wsGame = wb.Sheets["GameData"];
+      const gameJson = XLSX.utils.sheet_to_json(wsGame, { defval: "" });
+      gameRow.Serial = gameJson.length + 1; // serial number
+      gameJson.push(gameRow);
+      wb.Sheets["GameData"] = XLSX.utils.json_to_sheet(gameJson);
+
+      // Convert back to base64
+      const newContent = XLSX.write(wb, { type: "base64" });
+
+      // Commit back
+      await fetch(`https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/contents/${FILE_PATH}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `token ${TOKEN}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: "Append new game data",
+          content: newContent,
+          sha: data.sha
+        })
+      });
+
+      alert("Game saved successfully to central workbook!");
     }
   </script>
 </body>
