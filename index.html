@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>War Variant Experiment (GitHub Action Logging)</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    #game, #choiceBtns, #finalActions { display: none; }
+    #log { margin-top: 20px; max-height: 250px; overflow-y: auto; }
+    #status { margin-top: 15px; font-weight: bold; color: green; }
+  </style>
+</head>
+<body>
+  <h1>⚔️ War Variant Experiment</h1>
+
+  <!-- Demographics Form -->
+  <div id="form">
+    <h3>Participant Information</h3>
+    <label>Name: <input type="text" id="name"></label><br><br>
+    <label>Age: <input type="number" id="age"></label><br><br>
+    <label>Gender: 
+      <select id="gender">
+        <option value="">--Select--</option>
+        <option>Male</option>
+        <option>Female</option>
+        <option>Other</option>
+      </select>
+    </label><br><br>
+    <button onclick="startGame()">Start Game</button>
+  </div>
+
+  <!-- Game Area -->
+  <div id="game">
+    <p>Unique Game ID: <span id="gameId"></span></p>
+    <p>Rounds left: <span id="rounds">10</span></p>
+    <p>Your Score: <span id="playerScore">0</span> | Computer Score: <span id="compScore">0</span></p>
+
+    <button id="dealBtn" onclick="dealCards()">Deal Card</button>
+
+    <div id="current"></div>
+    <div id="choiceBtns">
+      <button onclick="resolveRound(true)">Play</button>
+      <button onclick="resolveRound(false)">Skip</button>
+    </div>
+
+    <div id="log"></div>
+  </div>
+
+  <!-- Final Actions -->
+  <div id="finalActions">
+    <button onclick="uploadToGitHub()">Save Data</button>
+    <p id="status"></p>
+    <button id="downloadBtn" onclick="downloadWorkbook()" style="display:none;">Download Workbook</button>
+  </div>
+
+  <script>
+    // ---------------- CONFIG ----------------
+    const GITHUB_USER = "YOUR_USERNAME";   // your GitHub username
+    const REPO_NAME = "YOUR_REPO";         // repo where Excel lives
+    const WORKFLOW_FILE = "append-game.yml"; // workflow filename
+    const BRANCH = "main";                  // default branch
+
+    // ⚠️ Do NOT put a personal access token here for public use.
+    // Instead, if you want to trigger the workflow from frontend,
+    // you must create a fine-scoped GitHub App / OAuth token.
+    // For now: replace with your token if you are testing privately.
+    const TOKEN = "YOUR_SECURE_TOKEN";
+
+    // ------------- Game Variables -----------
+    let rounds = 10;
+    let playerScore = 0, compScore = 0;
+    let flatResults = {};
+    let gameId = "G" + Date.now();
+    let demographics = {};
+    let currentPlayerCard = null, currentCompCard = null;
+    let currentRound = 0;
+
+    // ------------- Game Logic ---------------
+    function startGame() {
+      const name = document.getElementById("name").value;
+      const age = document.getElementById("age").value;
+      const gender = document.getElementById("gender").value;
+
+      if (!name || !age || !gender) {
+        alert("Please fill all demographic fields.");
+        return;
+      }
+
+      demographics = { Name: name, Age: age, Gender: gender };
+
+      document.getElementById("form").style.display = "none";
+      document.getElementById("game").style.display = "block";
+      document.getElementById("gameId").innerText = gameId;
+    }
+
+    function dealCards() {
+      if (rounds <= 0) return;
+
+      currentRound = 11 - rounds;
+      currentPlayerCard = Math.floor(Math.random() * 10) + 1;
+      currentCompCard = Math.floor(Math.random() * 10) + 1;
+
+      document.getElementById("current").innerHTML = 
+        `<p>Round ${currentRound}:<br>
+        Your Card: <b>${currentPlayerCard}</b><br>
+        Computer's Card: <i>Hidden</i></p>`;
+
+      document.getElementById("choiceBtns").style.display = "block";
+      document.getElementById("dealBtn").style.display = "none";
+    }
+
+    function resolveRound(playerPlays) {
+      let outcome = "Skipped";
+
+      if (playerPlays) {
+        if (currentPlayerCard > currentCompCard) {
+          playerScore += 10;
+          compScore -= 10;
+          outcome = "You Win!";
+        } else if (currentPlayerCard < currentCompCard) {
+          playerScore -= 10;
+          compScore += 10;
+          outcome = "Computer Wins!";
+        } else {
+          outcome = "Draw (no score change)";
+        }
+      }
+
+      flatResults[`PlayerChoice${currentRound}`] = playerPlays ? "Play" : "Skip";
+      flatResults[`PlayerCard${currentRound}`] = playerPlays ? currentPlayerCard : "Skipped";
+      flatResults[`ComputerCard${currentRound}`] = currentCompCard;
+      flatResults[`Outcome${currentRound}`] = outcome;
+
+      rounds--;
+      document.getElementById("rounds").innerText = rounds;
+      document.getElementById("playerScore").innerText = playerScore;
+      document.getElementById("compScore").innerText = compScore;
+
+      const log = document.getElementById("log");
+      log.innerHTML += `<p>Round ${currentRound}: You ${playerPlays ? "played " + currentPlayerCard : "skipped"} | 
+        Computer ${currentCompCard} → ${outcome}</p>`;
+
+      document.getElementById("choiceBtns").style.display = "none";
+      document.getElementById("dealBtn").style.display = "inline-block";
+      document.getElementById("current").innerHTML = "";
+
+      if (rounds === 0) {
+        document.getElementById("finalActions").style.display = "block";
+        document.getElementById("dealBtn").style.display = "none";
+      }
+    }
+
+    // ----------- GitHub Action Trigger --------
+    async function uploadToGitHub() {
+      const payload = {
+        ref: BRANCH,
+        inputs: {
+          gameData: JSON.stringify({
+            demographics: { GameID: gameId, ...demographics },
+            gameRow: { GameID: gameId, ...flatResults }
+          })
+        }
+      };
+
+      const response = await fetch(
+        `https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/actions/workflows/${WORKFLOW_FILE}/dispatches`,
+        {
+          method: "POST",
+          headers: {
+            "Accept": "application/vnd.github+json",
+            "Authorization": `Bearer ${TOKEN}`
+          },
+          body: JSON.stringify(payload)
+        }
+      );
+
+      if (response.ok) {
+        document.getElementById("status").innerText = "Game Data Saved (queued in GitHub Action)";
+        document.getElementById("downloadBtn").style.display = "inline-block";
+      } else {
+        document.getElementById("status").innerText = "❌ Failed to save data.";
+      }
+    }
+
+    // ----------- Download Workbook ----------
+    async function downloadWorkbook() {
+      const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/${BRANCH}/data/war_game.xlsx`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "war_game.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  </script>
+</body>
+</html>
