@@ -1,11 +1,8 @@
 name: Append Game Data
 
 on:
-  workflow_dispatch:
-    inputs:
-      gameData:
-        description: "Game data JSON string"
-        required: true
+  repository_dispatch:
+    types: [append-game]
 
 jobs:
   append:
@@ -23,13 +20,14 @@ jobs:
         run: npm install xlsx
 
       - name: Save gameData to file
-        run: |
-          echo '${{ github.event.inputs.gameData }}' > game.json
+        run: echo '${{ toJson(github.event.client_payload.gameData) }}' > game.json
 
       - name: Append data to Excel
         run: node .github/scripts/appendExcel.js
 
       - name: Commit and push changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}  # <-- your secret PAT
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Action"
