@@ -25,32 +25,28 @@ if (!fs.existsSync(filePath)) {
 }
 
 const wb = XLSX.readFile(filePath);
+const now = new Date().toISOString(); // ISO timestamp
 
-// ---- Prepare headers (keeps column order stable) ----
-const demoHeaders = ["Serial", "GameID", "Name", "Age", "Gender"];
+// ---- Prepare headers ----
+const demoHeaders = ["Serial", "GameID", "Name", "Age", "Gender", "DateSaved"];
 
 const gameHeaders = ["Serial", "GameID"];
 for (let i = 1; i <= 10; i++) {
   gameHeaders.push(`PlayerChoice${i}`, `PlayerCard${i}`, `ComputerCard${i}`, `Outcome${i}`);
 }
+gameHeaders.push("DateSaved");
 
 // ---- Demographics sheet ----
 let wsDemo = wb.Sheets["Demographics"];
-let demoRows = [];
+let demoRows = wsDemo ? XLSX.utils.sheet_to_json(wsDemo, { defval: "" }) : [];
 
-if (!wsDemo) {
-  console.warn("⚠️ 'Demographics' sheet missing. Creating it.");
-} else {
-  demoRows = XLSX.utils.sheet_to_json(wsDemo, { defval: "" });
-}
-
-// Add Serial number
 const demoRow = {
   Serial: demoRows.length + 1,
   GameID: gameData.demographics?.GameID || "",
   Name: gameData.demographics?.Name || "",
   Age: gameData.demographics?.Age || "",
-  Gender: gameData.demographics?.Gender || ""
+  Gender: gameData.demographics?.Gender || "",
+  DateSaved: now
 };
 
 demoRows.push(demoRow);
@@ -58,18 +54,10 @@ wb.Sheets["Demographics"] = XLSX.utils.json_to_sheet(demoRows, { header: demoHea
 
 // ---- GameData sheet ----
 let wsGame = wb.Sheets["GameData"];
-let gameRows = [];
+let gameRows = wsGame ? XLSX.utils.sheet_to_json(wsGame, { defval: "" }) : [];
 
-if (!wsGame) {
-  console.warn("⚠️ 'GameData' sheet missing. Creating it.");
-} else {
-  gameRows = XLSX.utils.sheet_to_json(wsGame, { defval: "" });
-}
+const newGameRow = { Serial: gameRows.length + 1, GameID: gameData.gameRow?.GameID || "", DateSaved: now };
 
-// Flattened game row with Serial + GameID + round fields
-const newGameRow = { Serial: gameRows.length + 1, GameID: gameData.gameRow?.GameID || "" };
-
-// Copy over round fields if present
 for (let i = 1; i <= 10; i++) {
   newGameRow[`PlayerChoice${i}`]   = gameData.gameRow?.[`PlayerChoice${i}`]   ?? "";
   newGameRow[`PlayerCard${i}`]     = gameData.gameRow?.[`PlayerCard${i}`]     ?? "";
