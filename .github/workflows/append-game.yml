@@ -1,11 +1,12 @@
 name: Append Game Data
 
 on:
-  repository_dispatch:
-    types: [append-game]
+  issues:
+    types: [opened]
 
 jobs:
   append:
+    if: startsWith(github.event.issue.title, 'GameData:')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -20,17 +21,23 @@ jobs:
         run: npm install xlsx
 
       - name: Save gameData to file
-        run: echo '${{ toJson(github.event.client_payload.gameData) }}' > game.json
+        run: echo '${{ github.event.issue.body }}' > game.json
 
       - name: Append data to Excel
         run: node .github/scripts/appendExcel.js
 
       - name: Commit and push changes
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}  # <-- your secret PAT
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Action"
           git add data/war_game.xlsx
           git commit -m "Append new game data [skip ci]" || echo "No changes to commit"
           git push
+
+      - name: Close the issue
+        uses: peter-evans/close-issue@v2
+        with:
+          issue-number: ${{ github.event.issue.number }}
+          comment: "Game data saved and issue closed ✅"
