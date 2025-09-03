@@ -7,8 +7,9 @@
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin-top: 40px; }
     button { margin: 10px; padding: 10px 20px; font-size: 16px; cursor: pointer; }
-    #game, #choiceBtns { display: none; }
+    #game, #choiceBtns, #finalActions { display: none; }
     #log { margin-top: 20px; max-height: 250px; overflow-y: auto; }
+    #status { margin-top: 15px; font-weight: bold; color: green; }
   </style>
 </head>
 <body>
@@ -47,9 +48,11 @@
     <div id="log"></div>
   </div>
 
-  <!-- Finalize -->
-  <div id="export" style="display:none;">
-    <button onclick="uploadToGitHub()">Save to Central Workbook</button>
+  <!-- Final Actions -->
+  <div id="finalActions">
+    <button onclick="uploadToGitHub()">Save Data</button>
+    <p id="status"></p>
+    <button id="downloadBtn" onclick="downloadWorkbook()" style="display:none;">Download Workbook</button>
   </div>
 
   <script>
@@ -57,12 +60,11 @@
     const GITHUB_USER = "YOUR_USERNAME";   // your GitHub username
     const REPO_NAME = "YOUR_REPO";         // repo where Excel lives
     const FILE_PATH = "data/war_game.xlsx"; // path in repo
-    const TOKEN = "YOUR_PERSONAL_ACCESS_TOKEN"; // ⚠️ Not safe for public
+    const TOKEN = "YOUR_PERSONAL_ACCESS_TOKEN"; // ⚠️ Do NOT expose in public repos
 
     // ------------- Game Variables -----------
     let rounds = 10;
     let playerScore = 0, compScore = 0;
-    let results = [];
     let flatResults = {};
     let gameId = "G" + Date.now();
     let demographics = {};
@@ -125,16 +127,6 @@
       flatResults[`ComputerCard${currentRound}`] = currentCompCard;
       flatResults[`Outcome${currentRound}`] = outcome;
 
-      results.push({
-        Round: currentRound,
-        PlayerCard: playerPlays ? currentPlayerCard : "Skipped",
-        ComputerCard: currentCompCard,
-        PlayerChoice: playerPlays ? "Play" : "Skip",
-        Outcome: outcome,
-        PlayerScore: playerScore,
-        ComputerScore: compScore
-      });
-
       rounds--;
       document.getElementById("rounds").innerText = rounds;
       document.getElementById("playerScore").innerText = playerScore;
@@ -149,7 +141,7 @@
       document.getElementById("current").innerHTML = "";
 
       if (rounds === 0) {
-        document.getElementById("export").style.display = "block";
+        document.getElementById("finalActions").style.display = "block";
         document.getElementById("dealBtn").style.display = "none";
       }
     }
@@ -172,14 +164,14 @@
       // Demographics sheet
       const wsDemo = wb.Sheets["Demographics"];
       const demoJson = XLSX.utils.sheet_to_json(wsDemo, { defval: "" });
-      demoRow.Serial = demoJson.length + 1; // serial number
+      demoRow.Serial = demoJson.length + 1;
       demoJson.push(demoRow);
       wb.Sheets["Demographics"] = XLSX.utils.json_to_sheet(demoJson);
 
       // GameData sheet
       const wsGame = wb.Sheets["GameData"];
       const gameJson = XLSX.utils.sheet_to_json(wsGame, { defval: "" });
-      gameRow.Serial = gameJson.length + 1; // serial number
+      gameRow.Serial = gameJson.length + 1;
       gameJson.push(gameRow);
       wb.Sheets["GameData"] = XLSX.utils.json_to_sheet(gameJson);
 
@@ -200,7 +192,21 @@
         })
       });
 
-      alert("Game saved successfully to central workbook!");
+      document.getElementById("status").innerText = "Game Data Saved";
+      document.getElementById("downloadBtn").style.display = "inline-block";
+    }
+
+    // ----------- Download Workbook ----------
+    async function downloadWorkbook() {
+      const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/${FILE_PATH}`);
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "war_game.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
   </script>
 </body>
