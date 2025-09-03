@@ -1,53 +1,88 @@
 const fs = require("fs");
 const XLSX = require("xlsx");
 
-// Load the JSON data from the game
-const gameData = JSON.parse(fs.readFileSync("game.json", "utf-8"));
+const filePath = "data/war_game.xlsx";
+
+// Read and parse the JSON that the workflow saved from the Issue body
+let raw = fs.readFileSync("game.json", "utf-8");
+let gameData;
+try {
+  gameData = JSON.parse(raw);
+} catch (e) {
+  console.error("❌ The Issue body is not valid JSON. Body was:\n", raw);
+  process.exit(1);
+}
 
 console.log("====================================");
 console.log("📥 Received Game Data from Issue:");
 console.log(JSON.stringify(gameData, null, 2));
 console.log("====================================");
 
-const filePath = "data/war_game.xlsx";
+// Ensure workbook exists
+if (!fs.existsSync(filePath)) {
+  console.error(`❌ Workbook not found at ${filePath}. Make sure data/war_game.xlsx exists in the repo.`);
+  process.exit(1);
+}
 
-// Load workbook
 const wb = XLSX.readFile(filePath);
 
+// ---- Prepare headers (keeps column order stable) ----
+const demoHeaders = ["Serial", "GameID", "Name", "Age", "Gender"];
+
+const gameHeaders = ["Serial", "GameID"];
+for (let i = 1; i <= 10; i++) {
+  gameHeaders.push(`PlayerChoice${i}`, `PlayerCard${i}`, `ComputerCard${i}`, `Outcome${i}`);
+}
+
 // ---- Demographics sheet ----
-const wsDemo = wb.Sheets["Demographics"];
-let demoJson = XLSX.utils.sheet_to_json(wsDemo, { defval: "" });
+let wsDemo = wb.Sheets["Demographics"];
+let demoRows = [];
+
+if (!wsDemo) {
+  console.warn("⚠️ 'Demographics' sheet missing. Creating it.");
+} else {
+  demoRows = XLSX.utils.sheet_to_json(wsDemo, { defval: "" });
+}
 
 // Add Serial number
-gameData.demographics.Serial = demoJson.length + 1;
+const demoRow = {
+  Serial: demoRows.length + 1,
+  GameID: gameData.demographics?.GameID || "",
+  Name: gameData.demographics?.Name || "",
+  Age: gameData.demographics?.Age || "",
+  Gender: gameData.demographics?.Gender || ""
+};
 
-// Append row
-demoJson.push(gameData.demographics);
-
-// Rewrite sheet
-wb.Sheets["Demographics"] = XLSX.utils.json_to_sheet(demoJson);
-
-console.log("✅ Appended Demographics Row:");
-console.log(gameData.demographics);
+demoRows.push(demoRow);
+wb.Sheets["Demographics"] = XLSX.utils.json_to_sheet(demoRows, { header: demoHeaders });
 
 // ---- GameData sheet ----
-const wsGame = wb.Sheets["GameData"];
-let gameJson = XLSX.utils.sheet_to_json(wsGame, { defval: "" });
+let wsGame = wb.Sheets["GameData"];
+let gameRows = [];
 
-// Add Serial number
-gameData.gameRow.Serial = gameJson.length + 1;
+if (!wsGame) {
+  console.warn("⚠️ 'GameData' sheet missing. Creating it.");
+} else {
+  gameRows = XLSX.utils.sheet_to_json(wsGame, { defval: "" });
+}
 
-// Append row
-gameJson.push(gameData.gameRow);
+// Flattened game row with Serial + GameID + round fields
+const newGameRow = { Serial: gameRows.length + 1, GameID: gameData.gameRow?.GameID || "" };
 
-// Rewrite sheet
-wb.Sheets["GameData"] = XLSX.utils.json_to_sheet(gameJson);
+// Copy over round fields if present
+for (let i = 1; i <= 10; i++) {
+  newGameRow[`PlayerChoice${i}`]   = gameData.gameRow?.[`PlayerChoice${i}`]   ?? "";
+  newGameRow[`PlayerCard${i}`]     = gameData.gameRow?.[`PlayerCard${i}`]     ?? "";
+  newGameRow[`ComputerCard${i}`]   = gameData.gameRow?.[`ComputerCard${i}`]   ?? "";
+  newGameRow[`Outcome${i}`]        = gameData.gameRow?.[`Outcome${i}`]        ?? "";
+}
 
-console.log("✅ Appended GameData Row:");
-console.log(gameData.gameRow);
+gameRows.push(newGameRow);
+wb.Sheets["GameData"] = XLSX.utils.json_to_sheet(gameRows, { header: gameHeaders });
 
-// Save workbook back
+// Save workbook
 XLSX.writeFile(wb, filePath);
 
+console.log("✅ Appended Demographics Row:", demoRow);
+console.log("✅ Appended GameData Row:", newGameRow);
 console.log("✅ Game data appended successfully");
-
