@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>War Variant Experiment (3 variants, 20 rounds)</title>
+  <title>War Variant Experiment (5 variants, 20 rounds)</title>
   <style>
     :root { --card-w: 90px; --card-h: 130px; --card-radius: 10px; }
     body { font-family: Arial, sans-serif; text-align: center; margin: 28px 16px; }
@@ -38,8 +38,6 @@
     .log-line { display: flex; align-items: center; gap: 10px; margin: 6px 0; flex-wrap: wrap; }
     .log-meta { font-size: 14px; color: #333; min-width: 160px; }
     .outcome { font-weight: 700; margin-left: 8px; }
-    .delta { font-weight: 700; margin-left: 8px; color:#111; }
-    .outcome.win { color: #0a7a0a; } .outcome.lose { color: #b91c1c; } .outcome.draw { color: #6b7280; }
   </style>
 </head>
 <body>
@@ -110,12 +108,13 @@
     // -------- CONFIG --------
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzBkLGuWPZKVRuv2Ql_YDUVODvLe1-tAUYSB9zaOymb7tON_iS3mNna9rv8jK9zrw06cg/exec"; // must end with /exec
 
-    // -------- Variants --------
-    // A: Skip 0/0, B: Skip -2 for player, +2 for computer, C: Skip +2 for player, -2 for computer
+    // -------- Variants (player delta on skip; computer gets the opposite) --------
     const VARIANTS = [
-      { key: "A", name: "Control (Skip = 0)", skipDeltaPlayer: 0,  skipDeltaComp: 0 },
-      { key: "B", name: "Skip penalty (You -2, Comp +2)", skipDeltaPlayer: -2, skipDeltaComp: +2 },
-      { key: "C", name: "Skip bonus (You +2, Comp -2)",  skipDeltaPlayer: +2, skipDeltaComp: -2 }
+      { key: "P+2", name: "Skip bonus (+2)", deltaPlayer: +2 },
+      { key: "P0",  name: "Control (0)",     deltaPlayer:  0 },
+      { key: "P-2", name: "Skip penalty (-2)", deltaPlayer: -2 },
+      { key: "P-4", name: "Skip penalty (-4)", deltaPlayer: -4 },
+      { key: "P-6", name: "Skip penalty (-6)", deltaPlayer: -6 }
     ];
     let variant = null;
 
@@ -136,6 +135,12 @@
       return `<div class="${classes}">${num}</div>`;
     }
 
+    function pointsPhrase(n) {
+      if (n > 0) return `You win ${n} point${n===1?"":"s"}`;
+      if (n < 0) return `You lose ${Math.abs(n)} point${Math.abs(n)===1?"":"s"}`;
+      return "No points change";
+    }
+
     function assignVariant() {
       const name = document.getElementById("name").value.trim();
       const age = document.getElementById("age").value.trim();
@@ -147,18 +152,18 @@
       }
       demographics = { Name: name, Age: age, Gender: gender, Country: country };
 
-      // Randomly assign one of the 3 variants
+      // Randomly assign one of the 5 variants
       variant = VARIANTS[Math.floor(Math.random() * VARIANTS.length)];
+      const compMirror = -variant.deltaPlayer;
 
-      // Show rules page
+      // Show rules
       document.getElementById("form").style.display = "none";
       document.getElementById("rules").style.display = "block";
       document.getElementById("variantName").innerText = variant.name;
 
-      const skipLine =
-        variant.skipDeltaPlayer === 0
-          ? "If you Skip: no score change for either player."
-          : `If you Skip: <b>You ${variant.skipDeltaPlayer > 0 ? "+"+variant.skipDeltaPlayer : variant.skipDeltaPlayer}</b>, <b>Computer ${variant.skipDeltaComp > 0 ? "+"+variant.skipDeltaComp : variant.skipDeltaComp}</b>.`;
+      const skipRule = variant.deltaPlayer === 0
+        ? "If you Skip: no points change for either player."
+        : `If you Skip: ${pointsPhrase(variant.deltaPlayer)}; the computer ${compMirror>0?"wins":"loses"} ${Math.abs(compMirror)} point${Math.abs(compMirror)===1?"":"s"}.`;
 
       document.getElementById("variantRules").innerHTML = `
         <ul>
@@ -168,10 +173,10 @@
           <li>If you <b>Play</b>:
             <ul>
               <li><b>Higher card wins</b>. Winner gets <b>+10</b>, loser gets <b>-10</b>.</li>
-              <li><b>Draw</b>: no score change.</li>
+              <li><b>Draw</b>: No points change.</li>
             </ul>
           </li>
-          <li>${skipLine}</li>
+          <li>${skipRule}</li>
           <li>After your decision, both cards are revealed and the score updates.</li>
         </ul>
       `;
@@ -209,22 +214,20 @@
         } else if (currentPlayerCard < currentCompCard) {
           deltaYou = -10; deltaComp = +10; outcome = "Computer Wins!";
         } else {
-          deltaYou = 0; deltaComp = 0; outcome = "Draw (no score change)";
+          deltaYou = 0; deltaComp = 0; outcome = "Draw";
         }
       } else {
-        // Apply mirrored skip effects based on variant
-        deltaYou = variant.skipDeltaPlayer || 0;
-        deltaComp = variant.skipDeltaComp || 0;
-        outcome = deltaYou === 0 && deltaComp === 0
-          ? "Skipped"
-          : `Skipped (You ${deltaYou>0?"+":""}${deltaYou}, Comp ${deltaComp>0?"+":""}${deltaComp})`;
+        // Skip: mirrored effect
+        deltaYou = variant.deltaPlayer || 0;
+        deltaComp = -deltaYou;
+        outcome = variant.deltaPlayer === 0 ? "Skipped" : `Skipped`;
       }
 
       // Update scores
       playerScore += deltaYou;
       compScore   += deltaComp;
 
-      // Record round results
+      // Record round results (Outcome keeps simple label; phrasing shown in log)
       flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
       flatResults[`PlayerCard${currentRound}`]    = playerPlays ? currentPlayerCard : "Skipped";
       flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
@@ -237,14 +240,17 @@
       document.getElementById("compScore").innerText = compScore;
       document.getElementById("compCardSlot").innerHTML = makeCard(currentCompCard);
 
-      const outcomeClass = outcome.includes("Win") ? (outcome.includes("You") ? "win" : "lose")
-                           : outcome.includes("Draw") ? "draw" : "";
+      // Build message: “You win/lose X points” or “No points change”
+      const phrase = (playerPlays && outcome === "Draw") || (!playerPlays && deltaYou === 0)
+        ? "No points change"
+        : pointsPhrase(deltaYou);
+
       const log = document.getElementById("log");
       log.innerHTML += `<div class="log-line">
         <div class="log-meta">Round ${currentRound}:</div>
         ${makeCard(currentPlayerCard, false, true)} vs ${makeCard(currentCompCard, false, true)}
-        <span class="outcome ${outcomeClass}">${outcome}</span>
-        <span class="delta">ΔYou: ${deltaYou>0?"+":""}${deltaYou}</span>
+        <span class="outcome">${outcome}</span>
+        <span class="outcome">— ${phrase}</span>
       </div>`;
 
       document.getElementById("choiceBtns").style.display = "none";
@@ -281,7 +287,6 @@
         document.getElementById("status").innerText = "✅ Data sent to Google Sheets! Check the sheet.";
       } catch (e) {
         document.getElementById("status").innerText = "❌ Network error: " + e.message;
-        // allow retry if it was a real network failure
         savedOnce = false;
         document.getElementById("saveBtn").disabled = false;
       }
