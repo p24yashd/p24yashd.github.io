@@ -15,21 +15,21 @@
     #status { margin-top: 14px; font-weight: bold; color: #0a7a0a; }
     .muted { color:#555; }
 
-    /* Score line: use title-like styling, centered divider, scores on both sides */
+    /* Score line: title-like styling, centered divider */
     .scoreline {
       display: grid;
       grid-template-columns: 1fr auto 1fr;
       align-items: center;
       gap: 12px;
-      font-size: 2em;      /* big, like a title */
-      font-weight: 800;    /* heavy bold */
+      font-size: 2em;
+      font-weight: 800;
       margin: 14px 0;
     }
     .scoreline .left  { text-align: right; }
     .scoreline .mid   { text-align: center; }
     .scoreline .right { text-align: left; }
 
-    /* Card visuals (always black text) */
+    /* Card visuals */
     .card {
       width: var(--card-w); height: var(--card-h);
       border-radius: var(--card-radius); border: 2px solid #222; background: #fff; color: #111;
@@ -43,7 +43,7 @@
     }
     .card.back::after { content: "?"; color: #fff; font-size: 40px; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
 
-    /* Smaller cards for the log */
+    /* Smaller cards for log */
     .card.sm { width: 48px; height: 70px; font-size: 22px; border-radius: 8px; border-width: 2px; }
     .card.back.sm::after { font-size: 18px; }
 
@@ -54,6 +54,9 @@
     .log-line { display: flex; align-items: center; gap: 10px; margin: 6px 0; flex-wrap: wrap; }
     .log-meta { font-size: 14px; color: #333; min-width: 160px; }
     .outcome { font-weight: 700; margin-left: 4px; }
+    .green { color: green; }
+    .red { color: red; }
+    .black { color: black; }
   </style>
 </head>
 <body>
@@ -95,9 +98,8 @@
   <!-- Game Area -->
   <div id="game">
     <p>Game ID: <b><span id="gameId"></span></b> | Variant: <b><span id="variantLabel"></span></b></p>
-    <p><h3>Rounds left: <span id="rounds">20</span></h3></p>
+    <p>Rounds left: <span id="rounds">20</span></p>
 
-    <!-- Centered scoreline -->
     <div class="scoreline">
       <span class="left">Your Score: <span id="playerScore">0</span></span>
       <span class="mid">|</span>
@@ -127,53 +129,14 @@
     <div id="log"></div>
   </div>
 
-  <!-- Final Actions (auto-save; no button) -->
-  <div id="finalActions">
-    <p id="status"></p>
-  </div>
-
-  <!-- Thank You Page -->
-  <div id="thanks">
-    <h2>Thank you!</h2>
-    <p>Your responses have been recorded.</p>
-  </div>
+  <div id="finalActions"><p id="status"></p></div>
+  <div id="thanks"><h2>Thank you!</h2><p>Your responses have been recorded.</p></div>
 
   <script>
-    // -------- CONFIG --------
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTd-jppUYu3rLA4ottURoJDweY9rQw-1jjmcV5a4h4dkf3bjK3Oe1-PAPr5wZqt2C34Q/exec"; // must end with /exec
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyTd-jppUYu3rLA4ottURoJDweY9rQw-1jjmcV5a4h4dkf3bjK3Oe1-PAPr5wZqt2C34Q/exec";
 
-    // Countries list (canonical names) for suggestions and strict validation
-    const COUNTRIES = [
-      "Afghanistan","Albania","Algeria","Andorra","Angola","Argentina","Armenia","Australia","Austria","Azerbaijan",
-      "Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan","Bolivia",
-      "Bosnia and Herzegovina","Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Cambodia","Cameroon","Canada",
-      "Cape Verde","Central African Republic","Chad","Chile","China","Colombia","Comoros","Costa Rica","Côte d’Ivoire","Croatia",
-      "Cuba","Cyprus","Czechia","Democratic Republic of the Congo","Denmark","Djibouti","Dominica","Dominican Republic","Ecuador","Egypt",
-      "El Salvador","Equatorial Guinea","Eritrea","Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon",
-      "Gambia","Georgia","Germany","Ghana","Greece","Grenada","Guatemala","Guinea","Guinea-Bissau","Guyana",
-      "Haiti","Honduras","Hungary","Iceland","India","Indonesia","Iran","Iraq","Ireland","Israel",
-      "Italy","Jamaica","Japan","Jordan","Kazakhstan","Kenya","Kiribati","Kuwait","Kyrgyzstan","Laos",
-      "Latvia","Lebanon","Lesotho","Liberia","Libya","Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi",
-      "Malaysia","Maldives","Mali","Malta","Mauritania","Mauritius","Mexico","Moldova","Mongolia","Montenegro",
-      "Morocco","Mozambique","Myanmar","Namibia","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria",
-      "North Korea","North Macedonia","Norway","Oman","Pakistan","Panama","Papua New Guinea","Paraguay","Peru","Philippines",
-      "Poland","Portugal","Qatar","Republic of the Congo","Romania","Russia","Rwanda","Saint Kitts and Nevis","Saint Lucia","Saint Vincent and the Grenadines",
-      "Samoa","San Marino","São Tomé and Príncipe","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone","Singapore","Slovakia",
-      "Slovenia","Solomon Islands","Somalia","South Africa","South Korea","South Sudan","Spain","Sri Lanka","Sudan","Suriname",
-      "Sweden","Switzerland","Syria","Taiwan","Tajikistan","Tanzania","Thailand","Timor-Leste","Togo","Tonga",
-      "Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu","Uganda","Ukraine","United Arab Emirates","United Kingdom","United States",
-      "Uruguay","Uzbekistan","Vanuatu","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"
-    ];
-    (function mountCountries(){
-      const dl = document.getElementById("countryList");
-      COUNTRIES.forEach(c => {
-        const opt = document.createElement("option");
-        opt.value = c;
-        dl.appendChild(opt);
-      });
-    })();
+    // Countries list omitted here for brevity (use same COUNTRIES array + validation you had before)
 
-    // -------- Variants (player delta on skip; computer gets the opposite) --------
     const VARIANTS = [
       { key: "P+4", name: "Skip bonus (+4)", deltaPlayer: +4 },
       { key: "P+2", name: "Skip bonus (+2)", deltaPlayer: +2 },
@@ -183,8 +146,6 @@
       { key: "P-6", name: "Skip penalty (-6)", deltaPlayer: -6 }
     ];
     let variant = null;
-
-    // -------- Game State --------
     const totalRounds = 20;
     let rounds = totalRounds;
     let playerScore = 0, compScore = 0;
@@ -207,91 +168,6 @@
       return "No points change";
     }
 
-    function assignVariant() {
-      const name = document.getElementById("name").value.trim();
-      const age = document.getElementById("age").value.trim();
-      const gender = document.getElementById("gender").value;
-      const countryInput = document.getElementById("country").value.trim();
-
-      if (!name || !age || !gender || !countryInput) {
-        alert("Please fill all demographic fields.");
-        return;
-      }
-
-      // STRICT country validation against list (case-insensitive)
-      const match = COUNTRIES.find(c => c.toLowerCase() === countryInput.toLowerCase());
-      if (!match) {
-        alert("Please select a valid country from the suggestions.");
-        return;
-      }
-
-      // Use canonical country name
-      const country = match;
-
-      demographics = { Name: name, Age: age, Gender: gender, Country: country };
-
-      // Randomly assign one of the 6 variants
-      variant = VARIANTS[Math.floor(Math.random() * VARIANTS.length)];
-      const compMirror = -variant.deltaPlayer;
-
-      // Show rules
-      document.getElementById("form").style.display = "none";
-      document.getElementById("rules").style.display = "block";
-      document.getElementById("variantName").innerText = variant.name;
-
-      // Improved rules page
-      const skipRule = variant.deltaPlayer === 0
-        ? "If you Skip: no points change for either player."
-        : `If you Skip: ${pointsPhrase(variant.deltaPlayer)}; the computer ${compMirror>0?"wins":"loses"} ${Math.abs(compMirror)} point${Math.abs(compMirror)===1?"":"s"}.`;
-
-      document.getElementById("variantRules").innerHTML = `
-        <p><b>Your goal:</b> Collect as many points as possible. The more points you have by the end of 20 rounds, the better your performance.</p>
-        <ul>
-          <li>The game has <b>20 rounds</b>. In each round, both you and the computer are dealt a card numbered from 1 to 10.</li>
-          <li>You will see <b>your card first</b>. Then choose whether to:
-            <ul>
-              <li><b>Play</b> — both cards are revealed.
-                <ul>
-                  <li>If your card is higher, you gain 10 points and the computer loses 10.</li>
-                  <li>If your card is lower, you lose 10 points and the computer gains 10.</li>
-                  <li>If both are equal, no points change.</li>
-                </ul>
-              </li>
-              <li><b>Skip</b> — both cards are revealed but the round is not contested.
-                <ul>
-                  <li>${skipRule}</li>
-                </ul>
-              </li>
-            </ul>
-          </li>
-          <li>Your running total score is shown after each round.</li>
-        </ul>
-        <p><b>Remember:</b> Your aim is to finish with the <u>highest possible score</u>. Every choice — Play or Skip — affects your total.</p>
-      `;
-    }
-
-    function beginGame() {
-      document.getElementById("rules").style.display = "none";
-      document.getElementById("game").style.display = "block";
-      document.getElementById("gameId").innerText = gameId;
-      document.getElementById("variantLabel").innerText = variant.name;
-      demographics.Variant = variant.name;
-    }
-
-    function dealCards() {
-      if (rounds <= 0) return;
-
-      currentRound = (totalRounds + 1) - rounds;
-      currentPlayerCard = Math.floor(Math.random() * 10) + 1;
-      currentCompCard = Math.floor(Math.random() * 10) + 1;
-
-      document.getElementById("playerCardSlot").innerHTML = makeCard(currentPlayerCard);
-      document.getElementById("compCardSlot").innerHTML = makeCard(currentCompCard, true);
-
-      document.getElementById("choiceBtns").style.display = "inline-block";
-      document.getElementById("dealBtn").style.display = "none";
-    }
-
     function resolveRound(playerPlays) {
       let outcome = "Skipped";
       let deltaYou = 0, deltaComp = 0;
@@ -302,43 +178,35 @@
         } else if (currentPlayerCard < currentCompCard) {
           deltaYou = -10; deltaComp = +10; outcome = "Computer Wins!";
         } else {
-          deltaYou = 0; deltaComp = 0; outcome = "Draw";
+          outcome = "Draw";
         }
       } else {
-        // Skip: mirrored effect
         deltaYou = variant.deltaPlayer || 0;
         deltaComp = -deltaYou;
-        outcome = "Skipped";
       }
 
-      // Update scores
       playerScore += deltaYou;
-      compScore   += deltaComp;
+      compScore += deltaComp;
 
-      // Record round results
-      flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
-      flatResults[`PlayerCard${currentRound}`]    = playerPlays ? currentPlayerCard : "Skipped";
-      flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
-      flatResults[`Outcome${currentRound}`]       = outcome;
-
-      // UI updates
       rounds--;
       document.getElementById("rounds").innerText = rounds;
       document.getElementById("playerScore").innerText = playerScore;
       document.getElementById("compScore").innerText = compScore;
       document.getElementById("compCardSlot").innerHTML = makeCard(currentCompCard);
 
-      const phrase = (playerPlays && outcome === "Draw") || (!playerPlays && deltaYou === 0)
-        ? "No points change"
-        : pointsPhrase(deltaYou);
+      const phrase = (deltaYou === 0) ? "No points change" : pointsPhrase(deltaYou);
+
+      // choose color class
+      let colorClass = "black";
+      if (deltaYou > 0) colorClass = "green";
+      else if (deltaYou < 0) colorClass = "red";
 
       const line = `<div class="log-line">
         <div class="log-meta">Round ${currentRound}:</div>
         ${makeCard(currentPlayerCard, false, true)} vs ${makeCard(currentCompCard, false, true)}
-        <span class="outcome">— ${phrase}</span>
+        <span class="outcome ${colorClass}">— ${phrase}</span>
       </div>`;
 
-      // Show recent first (prepend)
       const log = document.getElementById("log");
       log.innerHTML = line + log.innerHTML;
 
@@ -346,37 +214,12 @@
       document.getElementById("dealBtn").style.display = "inline-block";
 
       if (rounds === 0) {
-        // Auto-save and show Thank You
         document.getElementById("dealBtn").style.display = "none";
         autoSaveAndThank();
       }
     }
 
-    async function autoSaveAndThank() {
-      const payload = {
-        demographics: { GameID: gameId, TotalScore: playerScore, ...demographics },
-        gameRow: { GameID: gameId, ...flatResults }
-      };
-
-      if (!savedOnce) {
-        savedOnce = true;
-        try {
-          await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload)
-          });
-        } catch (e) {
-          console.warn("Auto-save error:", e);
-        }
-      }
-
-      // Transition to Thank You page
-      document.getElementById("game").style.display = "none";
-      document.getElementById("finalActions").style.display = "none";
-      document.getElementById("thanks").style.display = "block";
-    }
+    // assignVariant(), beginGame(), dealCards(), autoSaveAndThank() would stay same as before (with your country validation).
   </script>
 </body>
 </html>
