@@ -13,26 +13,32 @@
     #status { margin-top: 14px; font-weight: bold; color: #0a7a0a; }
     .muted { color:#555; }
 
-    /* Card visuals */
+    /* Card visuals (always black text) */
     .card {
       width: var(--card-w); height: var(--card-h);
-      border-radius: var(--card-radius); border: 2px solid #222; background: #fff;
+      border-radius: var(--card-radius); border: 2px solid #222; background: #fff; color: #111;
       box-shadow: 0 4px 10px rgba(0,0,0,0.15);
       display: inline-flex; align-items: center; justify-content: center;
       font-size: 44px; font-weight: 800; letter-spacing: 1px; user-select: none; position: relative;
     }
-    .card.red { color: #c62828; } .card.black { color: #111; }
     .card.back {
       background: repeating-linear-gradient(45deg, #3b82f6 0 10px, #1d4ed8 10px 20px);
       color: transparent; border-color: #0f172a;
     }
     .card.back::after { content: "?"; color: #fff; font-size: 40px; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+
+    /* Smaller cards for the log */
     .card.sm { width: 48px; height: 70px; font-size: 22px; border-radius: 8px; border-width: 2px; }
     .card.back.sm::after { font-size: 18px; }
-    #log { margin: 14px auto 0; max-width: 760px; text-align: left; max-height: 340px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px; }
-    .log-line { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+
+    #log {
+      margin: 14px auto 0; max-width: 760px; text-align: left; max-height: 340px; overflow-y: auto;
+      border-top: 1px solid #eee; padding-top: 10px;
+    }
+    .log-line { display: flex; align-items: center; gap: 10px; margin: 6px 0; flex-wrap: wrap; }
     .log-meta { font-size: 14px; color: #333; min-width: 160px; }
     .outcome { font-weight: 700; margin-left: 8px; }
+    .delta { font-weight: 700; margin-left: 8px; color:#111; }
     .outcome.win { color: #0a7a0a; } .outcome.lose { color: #b91c1c; } .outcome.draw { color: #6b7280; }
   </style>
 </head>
@@ -96,7 +102,7 @@
 
   <!-- Final Actions -->
   <div id="finalActions">
-    <button onclick="saveToSheets()">Save Data</button>
+    <button id="saveBtn" onclick="saveToSheets()">Save Data</button>
     <p id="status"></p>
   </div>
 
@@ -105,11 +111,11 @@
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzBkLGuWPZKVRuv2Ql_YDUVODvLe1-tAUYSB9zaOymb7tON_iS3mNna9rv8jK9zrw06cg/exec"; // must end with /exec
 
     // -------- Variants --------
-    // A: Skip 0, B: Skip -2, C: Skip +2
+    // A: Skip 0/0, B: Skip -2 for player, +2 for computer, C: Skip +2 for player, -2 for computer
     const VARIANTS = [
-      { key: "A", name: "Control (Skip = 0)", skipDelta: 0 },
-      { key: "B", name: "Skip penalty (Skip = -2)", skipDelta: -2 },
-      { key: "C", name: "Skip bonus (Skip = +2)", skipDelta: +2 }
+      { key: "A", name: "Control (Skip = 0)", skipDeltaPlayer: 0,  skipDeltaComp: 0 },
+      { key: "B", name: "Skip penalty (You -2, Comp +2)", skipDeltaPlayer: -2, skipDeltaComp: +2 },
+      { key: "C", name: "Skip bonus (You +2, Comp -2)",  skipDeltaPlayer: +2, skipDeltaComp: -2 }
     ];
     let variant = null;
 
@@ -122,12 +128,12 @@
     let demographics = {};
     let currentPlayerCard = null, currentCompCard = null;
     let currentRound = 0;
+    let savedOnce = false;
 
     function makeCard(num, hidden=false, small=false) {
       let classes = "card" + (small ? " sm" : "");
       if (hidden) return `<div class="${classes} back"></div>`;
-      let color = (num % 2 === 0) ? "red" : "black";
-      return `<div class="${classes} ${color}">${num}</div>`;
+      return `<div class="${classes}">${num}</div>`;
     }
 
     function assignVariant() {
@@ -148,6 +154,12 @@
       document.getElementById("form").style.display = "none";
       document.getElementById("rules").style.display = "block";
       document.getElementById("variantName").innerText = variant.name;
+
+      const skipLine =
+        variant.skipDeltaPlayer === 0
+          ? "If you Skip: no score change for either player."
+          : `If you Skip: <b>You ${variant.skipDeltaPlayer > 0 ? "+"+variant.skipDeltaPlayer : variant.skipDeltaPlayer}</b>, <b>Computer ${variant.skipDeltaComp > 0 ? "+"+variant.skipDeltaComp : variant.skipDeltaComp}</b>.`;
+
       document.getElementById("variantRules").innerHTML = `
         <ul>
           <li>The game has <b>20 rounds</b>. The computer <b>always plays</b>.</li>
@@ -159,7 +171,7 @@
               <li><b>Draw</b>: no score change.</li>
             </ul>
           </li>
-          <li>If you <b>Skip</b>: <b>${variant.skipDelta > 0 ? "+"+variant.skipDelta : variant.skipDelta}</b> is added to your score. The computer's score does not change.</li>
+          <li>${skipLine}</li>
           <li>After your decision, both cards are revealed and the score updates.</li>
         </ul>
       `;
@@ -170,7 +182,6 @@
       document.getElementById("game").style.display = "block";
       document.getElementById("gameId").innerText = gameId;
       document.getElementById("variantLabel").innerText = variant.name;
-      // Store variant label in demographics
       demographics.Variant = variant.name;
     }
 
@@ -190,46 +201,50 @@
 
     function resolveRound(playerPlays) {
       let outcome = "Skipped";
+      let deltaYou = 0, deltaComp = 0;
+
       if (playerPlays) {
         if (currentPlayerCard > currentCompCard) {
-          playerScore += 10; compScore -= 10;
-          outcome = "You Win!";
+          deltaYou = +10; deltaComp = -10; outcome = "You Win!";
         } else if (currentPlayerCard < currentCompCard) {
-          playerScore -= 10; compScore += 10;
-          outcome = "Computer Wins!";
+          deltaYou = -10; deltaComp = +10; outcome = "Computer Wins!";
         } else {
-          outcome = "Draw (no score change)";
+          deltaYou = 0; deltaComp = 0; outcome = "Draw (no score change)";
         }
       } else {
-        // Apply variant skip delta (only to player's score)
-        if (variant && variant.skipDelta) {
-          playerScore += variant.skipDelta;
-          outcome = variant.skipDelta > 0 ? `Skipped (+${variant.skipDelta})` : `Skipped (${variant.skipDelta})`;
-        } else {
-          outcome = "Skipped";
-        }
+        // Apply mirrored skip effects based on variant
+        deltaYou = variant.skipDeltaPlayer || 0;
+        deltaComp = variant.skipDeltaComp || 0;
+        outcome = deltaYou === 0 && deltaComp === 0
+          ? "Skipped"
+          : `Skipped (You ${deltaYou>0?"+":""}${deltaYou}, Comp ${deltaComp>0?"+":""}${deltaComp})`;
       }
 
+      // Update scores
+      playerScore += deltaYou;
+      compScore   += deltaComp;
+
+      // Record round results
       flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
       flatResults[`PlayerCard${currentRound}`]    = playerPlays ? currentPlayerCard : "Skipped";
       flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
       flatResults[`Outcome${currentRound}`]       = outcome;
 
+      // UI updates
       rounds--;
       document.getElementById("rounds").innerText = rounds;
       document.getElementById("playerScore").innerText = playerScore;
       document.getElementById("compScore").innerText = compScore;
-
-      // Reveal computer's card
       document.getElementById("compCardSlot").innerHTML = makeCard(currentCompCard);
 
-      const outcomeClass = outcome.includes("Win") ? (outcome.includes("You") ? "win" : "lose") :
-                           outcome.includes("Draw") ? "draw" : "";
+      const outcomeClass = outcome.includes("Win") ? (outcome.includes("You") ? "win" : "lose")
+                           : outcome.includes("Draw") ? "draw" : "";
       const log = document.getElementById("log");
       log.innerHTML += `<div class="log-line">
         <div class="log-meta">Round ${currentRound}:</div>
         ${makeCard(currentPlayerCard, false, true)} vs ${makeCard(currentCompCard, false, true)}
         <span class="outcome ${outcomeClass}">${outcome}</span>
+        <span class="delta">ΔYou: ${deltaYou>0?"+":""}${deltaYou}</span>
       </div>`;
 
       document.getElementById("choiceBtns").style.display = "none";
@@ -244,6 +259,13 @@
     }
 
     async function saveToSheets() {
+      if (savedOnce) {
+        document.getElementById("status").innerText = "ℹ️ This game was already sent. Please refresh for a new game.";
+        return;
+      }
+      savedOnce = true;
+      document.getElementById("saveBtn").disabled = true;
+
       const payload = {
         demographics: { GameID: gameId, ...demographics },
         gameRow: { GameID: gameId, ...flatResults }
@@ -259,6 +281,9 @@
         document.getElementById("status").innerText = "✅ Data sent to Google Sheets! Check the sheet.";
       } catch (e) {
         document.getElementById("status").innerText = "❌ Network error: " + e.message;
+        // allow retry if it was a real network failure
+        savedOnce = false;
+        document.getElementById("saveBtn").disabled = false;
       }
     }
   </script>
