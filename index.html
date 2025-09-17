@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>War Variant Experiment (5 variants, 20 rounds)</title>
+  <title>War Variant Experiment (6 variants, 20 rounds)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root { --card-w: 90px; --card-h: 130px; --card-radius: 10px; }
@@ -14,6 +14,13 @@
     #panel { margin: 10px auto 18px; display: flex; gap: 18px; justify-content: center; align-items: center; flex-wrap: wrap; }
     #status { margin-top: 14px; font-weight: bold; color: #0a7a0a; }
     .muted { color:#555; }
+
+    /* Score line: bigger and bold */
+    .scoreline {
+      font-size: 1.8em;
+      font-weight: 800;
+      margin: 14px 0;
+    }
 
     /* Card visuals (always black text) */
     .card {
@@ -81,8 +88,7 @@
   <!-- Game Area -->
   <div id="game">
     <p>Game ID: <b><span id="gameId"></span></b> | Variant: <b><span id="variantLabel"></span></b></p>
-    <p>Rounds left: <span id="rounds">20</span></p>
-    <p>Your Score: <span id="playerScore">0</span> | Computer Score: <span id="compScore">0</span></p>
+    <p class="scoreline">Your Score: <span id="playerScore">0</span> | Computer Score: <span id="compScore">0</span></p>
 
     <div id="panel">
       <div>
@@ -155,6 +161,7 @@
 
     // -------- Variants (player delta on skip; computer gets the opposite) --------
     const VARIANTS = [
+      { key: "P+4", name: "Skip bonus (+4)", deltaPlayer: +4 },
       { key: "P+2", name: "Skip bonus (+2)", deltaPlayer: +2 },
       { key: "P0",  name: "Control (0)",     deltaPlayer:  0 },
       { key: "P-2", name: "Skip penalty (-2)", deltaPlayer: -2 },
@@ -197,7 +204,7 @@
       }
       demographics = { Name: name, Age: age, Gender: gender, Country: country };
 
-      // Randomly assign one of the 5 variants
+      // Randomly assign one of the 6 variants
       variant = VARIANTS[Math.floor(Math.random() * VARIANTS.length)];
       const compMirror = -variant.deltaPlayer;
 
@@ -336,7 +343,6 @@
             body: JSON.stringify(payload)
           });
         } catch (e) {
-          // Even if network fails, continue to thank-you (avoid blocking participants)
           console.warn("Auto-save error:", e);
         }
       }
