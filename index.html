@@ -153,33 +153,34 @@
     }
 
     // -------- Save to Google Sheets --------
-    async function saveToSheets() {
-      const payload = {
-        demographics: { GameID: gameId, ...demographics },
-        gameRow: { GameID: gameId, ...flatResults }
-      };
+async function saveToSheets() {
+  const payload = {
+    demographics: { GameID: gameId, ...demographics },
+    gameRow: { GameID: gameId, ...flatResults }
+  };
 
-      try {
-        const res = await fetch(APPS_SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
+  try {
+    // Simple request: text/plain + no custom headers => no OPTIONS preflight
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(payload)
+    });
 
-        if (res.ok) {
-          document.getElementById("status").innerText = "✅ Data saved to Google Sheets!";
-        } else {
-          let msg = "❌ Failed to save data.";
-          try {
-            const err = await res.json();
-            if (err && err.message) msg += " " + err.message;
-          } catch (_) {}
-          document.getElementById("status").innerText = msg;
-        }
-      } catch (e) {
-        document.getElementById("status").innerText = "❌ Network error: " + e.message;
-      }
+    // Many Apps Script web apps won’t set CORS headers, so reading the body can still fail in some browsers.
+    // If you still see CORS warnings, switch to the no-cors variant below.
+
+    if (res.ok) {
+      document.getElementById("status").innerText = "✅ Data sent to Google Sheets!";
+      document.getElementById("downloadSheetBtn")?.style?.setProperty("display", "inline-block");
+    } else {
+      document.getElementById("status").innerText = "⚠️ Sent, but response not readable (CORS). Check the sheet.";
+      document.getElementById("downloadSheetBtn")?.style?.setProperty("display", "inline-block");
     }
+  } catch (e) {
+    document.getElementById("status").innerText = "❌ Network error: " + e.message;
+  }
+}
   </script>
 </body>
 </html>
