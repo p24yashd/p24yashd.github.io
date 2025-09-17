@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>War Variant Experiment</title>
+  <title>War Variant Experiment (Google Sheets, 20 rounds)</title>
   <style>
     body { font-family: Arial, sans-serif; text-align: center; margin-top: 32px; }
     button { margin: 8px; padding: 10px 18px; font-size: 16px; cursor: pointer; }
     #game, #choiceBtns, #finalActions { display: none; }
-    #log { margin: 16px auto; max-width: 720px; text-align: left; max-height: 280px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 8px; }
+    #log { margin: 16px auto; max-width: 720px; text-align: left; max-height: 320px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 8px; }
     #status { margin-top: 14px; font-weight: bold; color: #0a7a0a; }
   </style>
 </head>
@@ -33,7 +33,7 @@
   <!-- Game Area -->
   <div id="game">
     <p>Unique Game ID: <span id="gameId"></span></p>
-    <p>Rounds left: <span id="rounds">10</span></p>
+    <p>Rounds left: <span id="rounds">20</span></p>
     <p>Your Score: <span id="playerScore">0</span> | Computer Score: <span id="compScore">0</span></p>
 
     <button id="dealBtn" onclick="dealCards()">Deal Card</button>
@@ -50,19 +50,17 @@
 
   <!-- Final Actions -->
   <div id="finalActions">
-    <button onclick="openIssue()">Save Data</button>
+    <button onclick="saveToSheets()">Save Data</button>
     <p id="status"></p>
-    <button id="downloadBtn" onclick="downloadWorkbook()" style="display:none;">Download Workbook</button>
   </div>
 
   <script>
     // -------- CONFIG --------
-    const GITHUB_USER = "p24yashd";               
-    const REPO_NAME   = "p24yashd.github.io";     
-    const BRANCH      = "main";                   
+    const APPS_SCRIPT_URL = "PASTE_YOUR_GOOGLE_SCRIPT_WEB_APP_URL_HERE"; // ends with /exec
 
-    // -------- Game State --------
-    let rounds = 10;
+    // -------- Game State (20 rounds) --------
+    let totalRounds = 20;
+    let rounds = totalRounds;
     let playerScore = 0, compScore = 0;
     let flatResults = {};
     let gameId = "G" + Date.now();
@@ -90,10 +88,11 @@
     function dealCards() {
       if (rounds <= 0) return;
 
-      currentRound = 11 - rounds;
+      currentRound = (totalRounds + 1) - rounds; // 1..20
       currentPlayerCard = Math.floor(Math.random() * 10) + 1;
       currentCompCard = Math.floor(Math.random() * 10) + 1;
 
+      // Show ONLY player's card before decision
       document.getElementById("current").innerHTML =
         `<p><strong>Round ${currentRound}</strong><br>
         Your card: <b>${currentPlayerCard}</b><br>
@@ -120,6 +119,7 @@
         }
       }
 
+      // Record results
       flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
       flatResults[`PlayerCard${currentRound}`]    = playerPlays ? currentPlayerCard : "Skipped";
       flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
@@ -130,11 +130,14 @@
       document.getElementById("playerScore").innerText = playerScore;
       document.getElementById("compScore").innerText = compScore;
 
+      // Reveal both cards and outcome after decision
       document.getElementById("current").innerHTML =
         `<p><strong>Round ${currentRound}</strong><br>
         Your card: <b>${currentPlayerCard}</b> | Computer's card: <b>${currentCompCard}</b><br>
-        Outcome: <b>${outcome}</b></p>`;
+        Outcome: <b>${outcome}</b><br>
+        Score — You: <b>${playerScore}</b> | Computer: <b>${compScore}</b></p>`;
 
+      // Log line
       const log = document.getElementById("log");
       log.innerHTML += `<p>Round ${currentRound}: You ${playerPlays ? "played " + currentPlayerCard : "skipped"} | Computer ${currentCompCard} → ${outcome}</p>`;
 
@@ -144,43 +147,38 @@
       if (rounds === 0) {
         document.getElementById("finalActions").style.display = "block";
         document.getElementById("dealBtn").style.display = "none";
-        document.getElementById("current").innerHTML = `<p><b>Game complete.</b> Click “Save Data” to open a GitHub Issue and store your results.</p>`;
+        document.getElementById("current").innerHTML =
+          `<p><b>Game complete.</b> Click “Save Data” to store your results.</p>`;
       }
     }
 
-    // -------- Save via pre-filled GitHub Issue --------
-    function openIssue() {
-      const issueTitle = `GameData: ${gameId}`;
-      const bodyObj = {
+    // -------- Save to Google Sheets --------
+    async function saveToSheets() {
+      const payload = {
         demographics: { GameID: gameId, ...demographics },
         gameRow: { GameID: gameId, ...flatResults }
       };
 
-      const issueBody = encodeURIComponent(JSON.stringify(bodyObj, null, 2));
-      const url = `https://github.com/${GITHUB_USER}/${REPO_NAME}/issues/new?title=${encodeURIComponent(issueTitle)}&body=${issueBody}`;
+      try {
+        const res = await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
 
-      window.open(url, "_blank", "noopener");
-      document.getElementById("status").innerText =
-        "A GitHub Issue draft opened in a new tab. Click “Submit new issue” there to save your data.";
-      document.getElementById("downloadBtn").style.display = "inline-block";
-    }
-
-    // -------- Download workbook --------
-    async function downloadWorkbook() {
-      const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/${BRANCH}/data/war_game.xlsx`);
-      if (!res.ok) {
-        alert("Couldn't fetch workbook yet. Wait a moment after submitting the Issue, then try again.");
-        return;
+        if (res.ok) {
+          document.getElementById("status").innerText = "✅ Data saved to Google Sheets!";
+        } else {
+          let msg = "❌ Failed to save data.";
+          try {
+            const err = await res.json();
+            if (err && err.message) msg += " " + err.message;
+          } catch (_) {}
+          document.getElementById("status").innerText = msg;
+        }
+      } catch (e) {
+        document.getElementById("status").innerText = "❌ Network error: " + e.message;
       }
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "war_game.xlsx";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
     }
   </script>
 </body>
