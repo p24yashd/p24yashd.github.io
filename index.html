@@ -2,13 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>War Variant Experiment (Google Sheets, 20 rounds)</title>
+  <title>War Variant Experiment (3 variants, 20 rounds)</title>
   <style>
-    body { font-family: Arial, sans-serif; text-align: center; margin-top: 32px; }
+    :root { --card-w: 90px; --card-h: 130px; --card-radius: 10px; }
+    body { font-family: Arial, sans-serif; text-align: center; margin: 28px 16px; }
+    h1 { margin-bottom: 10px; }
     button { margin: 8px; padding: 10px 18px; font-size: 16px; cursor: pointer; }
-    #game, #choiceBtns, #finalActions { display: none; }
-    #log { margin: 16px auto; max-width: 720px; text-align: left; max-height: 320px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 8px; }
+    #rules, #game, #choiceBtns, #finalActions { display: none; }
+    #panel { margin: 10px auto 18px; display: flex; gap: 18px; justify-content: center; align-items: center; flex-wrap: wrap; }
     #status { margin-top: 14px; font-weight: bold; color: #0a7a0a; }
+    .muted { color:#555; }
+
+    /* Card visuals */
+    .card {
+      width: var(--card-w); height: var(--card-h);
+      border-radius: var(--card-radius); border: 2px solid #222; background: #fff;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 44px; font-weight: 800; letter-spacing: 1px; user-select: none; position: relative;
+    }
+    .card.red { color: #c62828; } .card.black { color: #111; }
+    .card.back {
+      background: repeating-linear-gradient(45deg, #3b82f6 0 10px, #1d4ed8 10px 20px);
+      color: transparent; border-color: #0f172a;
+    }
+    .card.back::after { content: "?"; color: #fff; font-size: 40px; text-shadow: 0 1px 2px rgba(0,0,0,0.4); }
+    .card.sm { width: 48px; height: 70px; font-size: 22px; border-radius: 8px; border-width: 2px; }
+    .card.back.sm::after { font-size: 18px; }
+    #log { margin: 14px auto 0; max-width: 760px; text-align: left; max-height: 340px; overflow-y: auto; border-top: 1px solid #eee; padding-top: 10px; }
+    .log-line { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+    .log-meta { font-size: 14px; color: #333; min-width: 160px; }
+    .outcome { font-weight: 700; margin-left: 8px; }
+    .outcome.win { color: #0a7a0a; } .outcome.lose { color: #b91c1c; } .outcome.draw { color: #6b7280; }
   </style>
 </head>
 <body>
@@ -27,14 +52,35 @@
         <option>Other</option>
       </select>
     </label><br><br>
-    <button onclick="startGame()">Start Game</button>
+    <label>Country: <input type="text" id="country" placeholder="Enter your country"></label><br><br>
+    <button onclick="assignVariant()">Start Game</button>
+  </div>
+
+  <!-- Rules Page -->
+  <div id="rules">
+    <h3>Game Rules</h3>
+    <p class="muted">Variant: <b><span id="variantName"></span></b></p>
+    <div id="variantRules" style="max-width:720px;margin:0 auto;text-align:left;"></div>
+    <br>
+    <button onclick="beginGame()">I understand, begin</button>
   </div>
 
   <!-- Game Area -->
   <div id="game">
-    <p>Unique Game ID: <span id="gameId"></span></p>
+    <p>Game ID: <b><span id="gameId"></span></b> | Variant: <b><span id="variantLabel"></span></b></p>
     <p>Rounds left: <span id="rounds">20</span></p>
     <p>Your Score: <span id="playerScore">0</span> | Computer Score: <span id="compScore">0</span></p>
+
+    <div id="panel">
+      <div>
+        <div><b>Your Card</b></div>
+        <div id="playerCardSlot"></div>
+      </div>
+      <div>
+        <div><b>Computer Card</b></div>
+        <div id="compCardSlot"></div>
+      </div>
+    </div>
 
     <button id="dealBtn" onclick="dealCards()">Deal Card</button>
 
@@ -56,10 +102,19 @@
 
   <script>
     // -------- CONFIG --------
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbybrWqI68INKsAgQPfkIhNq-Vb3MpNdho_r3Uz5mUPF1LFaIkku9XKQVD3cm5QcIZZd/exec"; // ends with /exec
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzBkLGuWPZKVRuv2Ql_YDUVODvLe1-tAUYSB9zaOymb7tON_iS3mNna9rv8jK9zrw06cg/exec"; // must end with /exec
 
-    // -------- Game State (20 rounds) --------
-    let totalRounds = 20;
+    // -------- Variants --------
+    // A: Skip 0, B: Skip -2, C: Skip +2
+    const VARIANTS = [
+      { key: "A", name: "Control (Skip = 0)", skipDelta: 0 },
+      { key: "B", name: "Skip penalty (Skip = -2)", skipDelta: -2 },
+      { key: "C", name: "Skip bonus (Skip = +2)", skipDelta: +2 }
+    ];
+    let variant = null;
+
+    // -------- Game State --------
+    const totalRounds = 20;
     let rounds = totalRounds;
     let playerScore = 0, compScore = 0;
     let flatResults = {};
@@ -68,35 +123,66 @@
     let currentPlayerCard = null, currentCompCard = null;
     let currentRound = 0;
 
-    function startGame() {
+    function makeCard(num, hidden=false, small=false) {
+      let classes = "card" + (small ? " sm" : "");
+      if (hidden) return `<div class="${classes} back"></div>`;
+      let color = (num % 2 === 0) ? "red" : "black";
+      return `<div class="${classes} ${color}">${num}</div>`;
+    }
+
+    function assignVariant() {
       const name = document.getElementById("name").value.trim();
       const age = document.getElementById("age").value.trim();
       const gender = document.getElementById("gender").value;
-
-      if (!name || !age || !gender) {
+      const country = document.getElementById("country").value.trim();
+      if (!name || !age || !gender || !country) {
         alert("Please fill all demographic fields.");
         return;
       }
+      demographics = { Name: name, Age: age, Gender: gender, Country: country };
 
-      demographics = { Name: name, Age: age, Gender: gender };
+      // Randomly assign one of the 3 variants
+      variant = VARIANTS[Math.floor(Math.random() * VARIANTS.length)];
 
+      // Show rules page
       document.getElementById("form").style.display = "none";
+      document.getElementById("rules").style.display = "block";
+      document.getElementById("variantName").innerText = variant.name;
+      document.getElementById("variantRules").innerHTML = `
+        <ul>
+          <li>The game has <b>20 rounds</b>. The computer <b>always plays</b>.</li>
+          <li>Cards are numbers from <b>1 to 10</b>, dealt randomly each round.</li>
+          <li>You see <b>your card</b> first, then choose to <b>Play</b> or <b>Skip</b>.</li>
+          <li>If you <b>Play</b>:
+            <ul>
+              <li><b>Higher card wins</b>. Winner gets <b>+10</b>, loser gets <b>-10</b>.</li>
+              <li><b>Draw</b>: no score change.</li>
+            </ul>
+          </li>
+          <li>If you <b>Skip</b>: <b>${variant.skipDelta > 0 ? "+"+variant.skipDelta : variant.skipDelta}</b> is added to your score. The computer's score does not change.</li>
+          <li>After your decision, both cards are revealed and the score updates.</li>
+        </ul>
+      `;
+    }
+
+    function beginGame() {
+      document.getElementById("rules").style.display = "none";
       document.getElementById("game").style.display = "block";
       document.getElementById("gameId").innerText = gameId;
+      document.getElementById("variantLabel").innerText = variant.name;
+      // Store variant label in demographics
+      demographics.Variant = variant.name;
     }
 
     function dealCards() {
       if (rounds <= 0) return;
 
-      currentRound = (totalRounds + 1) - rounds; // 1..20
+      currentRound = (totalRounds + 1) - rounds;
       currentPlayerCard = Math.floor(Math.random() * 10) + 1;
       currentCompCard = Math.floor(Math.random() * 10) + 1;
 
-      // Show ONLY player's card before decision
-      document.getElementById("current").innerHTML =
-        `<p><strong>Round ${currentRound}</strong><br>
-        Your card: <b>${currentPlayerCard}</b><br>
-        Computer's card: <i>Hidden</i></p>`;
+      document.getElementById("playerCardSlot").innerHTML = makeCard(currentPlayerCard);
+      document.getElementById("compCardSlot").innerHTML = makeCard(currentCompCard, true);
 
       document.getElementById("choiceBtns").style.display = "inline-block";
       document.getElementById("dealBtn").style.display = "none";
@@ -104,22 +190,26 @@
 
     function resolveRound(playerPlays) {
       let outcome = "Skipped";
-
       if (playerPlays) {
         if (currentPlayerCard > currentCompCard) {
-          playerScore += 10;
-          compScore -= 10;
+          playerScore += 10; compScore -= 10;
           outcome = "You Win!";
         } else if (currentPlayerCard < currentCompCard) {
-          playerScore -= 10;
-          compScore += 10;
+          playerScore -= 10; compScore += 10;
           outcome = "Computer Wins!";
         } else {
           outcome = "Draw (no score change)";
         }
+      } else {
+        // Apply variant skip delta (only to player's score)
+        if (variant && variant.skipDelta) {
+          playerScore += variant.skipDelta;
+          outcome = variant.skipDelta > 0 ? `Skipped (+${variant.skipDelta})` : `Skipped (${variant.skipDelta})`;
+        } else {
+          outcome = "Skipped";
+        }
       }
 
-      // Record results
       flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
       flatResults[`PlayerCard${currentRound}`]    = playerPlays ? currentPlayerCard : "Skipped";
       flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
@@ -130,16 +220,17 @@
       document.getElementById("playerScore").innerText = playerScore;
       document.getElementById("compScore").innerText = compScore;
 
-      // Reveal both cards and outcome after decision
-      document.getElementById("current").innerHTML =
-        `<p><strong>Round ${currentRound}</strong><br>
-        Your card: <b>${currentPlayerCard}</b> | Computer's card: <b>${currentCompCard}</b><br>
-        Outcome: <b>${outcome}</b><br>
-        Score — You: <b>${playerScore}</b> | Computer: <b>${compScore}</b></p>`;
+      // Reveal computer's card
+      document.getElementById("compCardSlot").innerHTML = makeCard(currentCompCard);
 
-      // Log line
+      const outcomeClass = outcome.includes("Win") ? (outcome.includes("You") ? "win" : "lose") :
+                           outcome.includes("Draw") ? "draw" : "";
       const log = document.getElementById("log");
-      log.innerHTML += `<p>Round ${currentRound}: You ${playerPlays ? "played " + currentPlayerCard : "skipped"} | Computer ${currentCompCard} → ${outcome}</p>`;
+      log.innerHTML += `<div class="log-line">
+        <div class="log-meta">Round ${currentRound}:</div>
+        ${makeCard(currentPlayerCard, false, true)} vs ${makeCard(currentCompCard, false, true)}
+        <span class="outcome ${outcomeClass}">${outcome}</span>
+      </div>`;
 
       document.getElementById("choiceBtns").style.display = "none";
       document.getElementById("dealBtn").style.display = "inline-block";
@@ -152,35 +243,24 @@
       }
     }
 
-    // -------- Save to Google Sheets --------
-async function saveToSheets() {
-  const payload = {
-    demographics: { GameID: gameId, ...demographics },
-    gameRow: { GameID: gameId, ...flatResults }
-  };
+    async function saveToSheets() {
+      const payload = {
+        demographics: { GameID: gameId, ...demographics },
+        gameRow: { GameID: gameId, ...flatResults }
+      };
 
-  try {
-    // Simple request: text/plain + no custom headers => no OPTIONS preflight
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify(payload)
-    });
-
-    // Many Apps Script web apps won’t set CORS headers, so reading the body can still fail in some browsers.
-    // If you still see CORS warnings, switch to the no-cors variant below.
-
-    if (res.ok) {
-      document.getElementById("status").innerText = "✅ Data sent to Google Sheets!";
-      document.getElementById("downloadSheetBtn")?.style?.setProperty("display", "inline-block");
-    } else {
-      document.getElementById("status").innerText = "⚠️ Sent, but response not readable (CORS). Check the sheet.";
-      document.getElementById("downloadSheetBtn")?.style?.setProperty("display", "inline-block");
+      try {
+        await fetch(APPS_SCRIPT_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
+        });
+        document.getElementById("status").innerText = "✅ Data sent to Google Sheets! Check the sheet.";
+      } catch (e) {
+        document.getElementById("status").innerText = "❌ Network error: " + e.message;
+      }
     }
-  } catch (e) {
-    document.getElementById("status").innerText = "❌ Network error: " + e.message;
-  }
-}
   </script>
 </body>
 </html>
