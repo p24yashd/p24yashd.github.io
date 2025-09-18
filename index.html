@@ -98,7 +98,7 @@
   <!-- Game Area -->
   <div id="game">
     <p>Game ID: <b><span id="gameId"></span></b> | Variant: <b><span id="variantLabel"></span></b></p>
-    <p><h3>Rounds left: <span id="rounds">20</span></h3></p>
+    <p>Rounds left: <span id="rounds">20</span></p>
 
     <!-- Centered scoreline -->
     <div class="scoreline">
@@ -319,9 +319,9 @@
       playerScore += deltaYou;
       compScore   += deltaComp;
 
-      // Record round results
+      // Record round results (ALWAYS store player's card value)
       flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
-      flatResults[`PlayerCard${currentRound}`]    = playerPlays ? currentPlayerCard : "Skipped";
+      flatResults[`PlayerCard${currentRound}`]    = currentPlayerCard;   // <<<<<< changed here
       flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
       flatResults[`Outcome${currentRound}`]       = outcome;
 
