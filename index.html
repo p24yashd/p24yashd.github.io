@@ -15,7 +15,15 @@
     #status { margin-top: 14px; font-weight: bold; color: #0a7a0a; }
     .muted { color:#555; }
 
-    /* Score line: title-like styling, centered divider, scores on both sides */
+    /* Rounds left pill */
+    .rounds-wrap { margin: 8px 0 2px; }
+    .rounds-pill {
+      display: inline-block; padding: 6px 14px; border-radius: 999px;
+      background: #111; color: #fff; font-weight: 800; letter-spacing: .3px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+
+    /* Score line: title-like styling, centered divider */
     .scoreline {
       display: grid;
       grid-template-columns: 1fr auto 1fr;
@@ -23,11 +31,21 @@
       gap: 12px;
       font-size: 2em;
       font-weight: 800;
-      margin: 14px 0;
+      margin: 12px 0 16px;
     }
     .scoreline .left  { text-align: right; }
     .scoreline .mid   { text-align: center; }
     .scoreline .right { text-align: left; }
+
+    /* Variant banners (rules + gameplay) */
+    .variant-banner {
+      max-width: 820px; margin: 10px auto; padding: 10px 14px; border-radius: 10px;
+      font-weight: 700; line-height: 1.35; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .variant-banner small { display:block; font-weight:600; opacity:.9; }
+    .variant-banner.penalty { background:#ffe5e5; color:#8b0000; border:1px solid #f2bcbc; }
+    .variant-banner.bonus   { background:#e8ffe8; color:#0a6c0a; border:1px solid #b8e6b8; }
+    .variant-banner.neutral { background:#f2f2f2; color:#222;    border:1px solid #ddd; }
 
     /* Card visuals (always black text) */
     .card {
@@ -90,7 +108,8 @@
   <div id="rules">
     <h3>Game Rules</h3>
     <p class="muted">Variant: <b><span id="variantName"></span></b></p>
-    <div id="variantRules" style="max-width:720px;margin:0 auto;text-align:left;"></div>
+    <div id="variantBannerRules" class="variant-banner neutral" aria-live="polite"></div>
+    <div id="variantRules" style="max-width:820px;margin:0 auto;text-align:left;"></div>
     <br>
     <button onclick="beginGame()">I understand, begin</button>
   </div>
@@ -98,7 +117,11 @@
   <!-- Game Area -->
   <div id="game">
     <p>Game ID: <b><span id="gameId"></span></b> | Variant: <b><span id="variantLabel"></span></b></p>
-    <p>Rounds left: <span id="rounds">20</span></p>
+
+    <!-- Rounds left highlighted -->
+    <div class="rounds-wrap">
+      <span class="rounds-pill">Rounds left: <span id="rounds">20</span></span>
+    </div>
 
     <!-- Centered scoreline -->
     <div class="scoreline">
@@ -117,6 +140,9 @@
         <div id="compCardSlot"></div>
       </div>
     </div>
+
+    <!-- Gameplay skip effect banner -->
+    <div id="variantBannerPlay" class="variant-banner neutral" style="display:none;"></div>
 
     <button id="dealBtn" onclick="dealCards()">Deal Card</button>
 
@@ -138,6 +164,7 @@
   <!-- Thank You Page -->
   <div id="thanks">
     <h2>Thank you!</h2>
+    <p>You scored <b><span id="finalScore">0</span></b> points.</p>
     <p>Your responses have been recorded.</p>
     <button onclick="playAgain()">Play again</button>
   </div>
@@ -146,7 +173,7 @@
     // -------- CONFIG --------
     const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxp9hM9B-VSw92nrVGYfIi9hAZRAw5gTPV1GlCyo7GGkZxAjnEPWV6JAig3D1r4kN7nMA/exec"; // must end with /exec
 
-    // Countries list (canonical names) for suggestions + strict validation
+    // Countries list (canonical) for suggestions + strict validation
     const COUNTRIES = [
       "Afghanistan","Albania","Algeria","Andorra","Angola","Argentina","Armenia","Australia","Austria","Azerbaijan",
       "Bahamas","Bahrain","Bangladesh","Barbados","Belarus","Belgium","Belize","Benin","Bhutan","Bolivia",
@@ -198,7 +225,6 @@
     let currentRound = 0;
     let variant = null;
     let savedOnce = false;
-    let demographicsLocked = false; // becomes true after first game save
 
     function makeCard(num, hidden=false, small=false) {
       let classes = "card" + (small ? " sm" : "");
@@ -212,6 +238,17 @@
       return "No points change";
     }
 
+    // ---------- helpers for banners ----------
+    function setVariantBanner(el, delta) {
+      el.style.display = "block";
+      el.classList.remove("penalty","bonus","neutral");
+      let cls = "neutral", text = "If you Skip: no points change for either player.";
+      if (delta > 0) { cls = "bonus"; text = `If you Skip: You win ${delta} point${delta===1?"":"s"}; the computer loses ${delta}.`; }
+      if (delta < 0) { cls = "penalty"; const m = Math.abs(delta); text = `If you Skip: You lose ${m} point${m===1?"":"s"}; the computer wins ${m}.`; }
+      el.classList.add(cls);
+      el.innerHTML = `<small>Skip effect in this variant</small>${text}`;
+    }
+
     // ======= DEMO STEP: ASSIGN VARIANT (STRICT COUNTRY VALIDATION) =======
     function assignVariant() {
       const name = document.getElementById("name").value.trim();
@@ -223,14 +260,9 @@
         alert("Please fill all demographic fields.");
         return;
       }
-
-      // STRICT country validation against list (case-insensitive)
       const match = COUNTRIES.find(c => c.toLowerCase() === countryInput.toLowerCase());
-      if (!match) {
-        alert("Please select a valid country from the suggestions.");
-        return;
-      }
-      const country = match; // canonical
+      if (!match) { alert("Please select a valid country from the suggestions."); return; }
+      const country = match;
 
       demographics = { Name: name, Age: age, Gender: gender, Country: country };
 
@@ -243,7 +275,8 @@
       document.getElementById("rules").style.display = "block";
       document.getElementById("variantName").innerText = variant.name;
 
-      // Rules text
+      // Rules banner + body
+      setVariantBanner(document.getElementById("variantBannerRules"), variant.deltaPlayer);
       const skipRule = variant.deltaPlayer === 0
         ? "If you Skip: no points change for either player."
         : `If you Skip: ${pointsPhrase(variant.deltaPlayer)}; the computer ${compMirror>0?"wins":"loses"} ${Math.abs(compMirror)} point${Math.abs(compMirror)===1?"":"s"}.`;
@@ -281,6 +314,9 @@
       document.getElementById("gameId").innerText = gameId;
       document.getElementById("variantLabel").innerText = variant.name;
       demographics.Variant = variant.name;
+
+      // Show gameplay banner for skip effect
+      setVariantBanner(document.getElementById("variantBannerPlay"), variant.deltaPlayer);
     }
 
     // ======= DEAL =======
@@ -303,29 +339,23 @@
       let deltaYou = 0, deltaComp = 0;
 
       if (playerPlays) {
-        if (currentPlayerCard > currentCompCard) {
-          deltaYou = +10; deltaComp = -10; outcome = "You Win!";
-        } else if (currentPlayerCard < currentCompCard) {
-          deltaYou = -10; deltaComp = +10; outcome = "Computer Wins!";
-        } else {
-          deltaYou = 0; deltaComp = 0; outcome = "Draw";
-        }
+        if (currentPlayerCard > currentCompCard)      { deltaYou = +10; deltaComp = -10; outcome = "You Win!"; }
+        else if (currentPlayerCard < currentCompCard) { deltaYou = -10; deltaComp = +10; outcome = "Computer Wins!"; }
+        else                                          { deltaYou = 0;   deltaComp = 0;   outcome = "Draw"; }
       } else {
-        // Skip: mirrored effect
         deltaYou = variant.deltaPlayer || 0;
         deltaComp = -deltaYou;
         outcome = "Skipped";
       }
 
       // Update scores
-      playerScore += deltaYou;
-      compScore   += deltaComp;
+      playerScore += deltaYou; compScore += deltaComp;
 
-      // Record round results (ALWAYS store player's card value)
-      flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
-      flatResults[`PlayerCard${currentRound}`]    = currentPlayerCard;
-      flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
-      flatResults[`Outcome${currentRound}`]       = outcome;
+      // Record (always store player card)
+      flatResults[`PlayerChoice${currentRound}`] = playerPlays ? "Play" : "Skip";
+      flatResults[`PlayerCard${currentRound}`]   = currentPlayerCard;
+      flatResults[`ComputerCard${currentRound}`] = currentCompCard;
+      flatResults[`Outcome${currentRound}`]      = outcome;
 
       // UI updates
       rounds--;
@@ -334,127 +364,8 @@
       document.getElementById("compScore").innerText = compScore;
       document.getElementById("compCardSlot").innerHTML = makeCard(currentCompCard);
 
-      // Build message and color
+      // Log line with color
       const phrase = (deltaYou === 0) ? "No points change" : pointsPhrase(deltaYou);
-      let colorClass = "black";
-      if (deltaYou > 0) colorClass = "green";
-      else if (deltaYou < 0) colorClass = "red";
-
+      let colorClass = "black"; if (deltaYou > 0) colorClass = "green"; else if (deltaYou < 0) colorClass = "red";
       const line = `<div class="log-line">
         <div class="log-meta">Round ${currentRound}:</div>
-        ${makeCard(currentPlayerCard, false, true)} vs ${makeCard(currentCompCard, false, true)}
-        <span class="outcome ${colorClass}">— ${phrase}</span>
-      </div>`;
-
-      // Recent first (prepend)
-      const log = document.getElementById("log");
-      log.innerHTML = line + log.innerHTML;
-
-      document.getElementById("choiceBtns").style.display = "none";
-      document.getElementById("dealBtn").style.display = "inline-block";
-
-      if (rounds === 0) {
-        // Auto-save and show Thank You
-        document.getElementById("dealBtn").style.display = "none";
-        autoSaveAndThank();
-      }
-    }
-
-    // ======= AUTO-SAVE + THANK YOU =======
-    async function autoSaveAndThank() {
-      const payload = {
-        demographics: { GameID: gameId, TotalScore: playerScore, ...demographics },
-        gameRow: { GameID: gameId, ...flatResults }
-      };
-
-      if (!savedOnce) {
-        savedOnce = true;
-        try {
-          await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "text/plain;charset=utf-8" },
-            body: JSON.stringify(payload)
-          });
-          demographicsLocked = true; // after first successful send, we consider details locked for "Play again"
-        } catch (e) {
-          console.warn("Auto-save error:", e);
-        }
-      }
-
-      // Transition to Thank You page
-      document.getElementById("game").style.display = "none";
-      document.getElementById("finalActions").style.display = "none";
-      document.getElementById("thanks").style.display = "block";
-    }
-
-    // ======= PLAY AGAIN (skip demographics, reuse details) =======
-    function playAgain() {
-      // Reuse demographics as-is (must exist from first game)
-      if (!demographics || !demographics.Name) {
-        // Safety fallback: if somehow no prior demographics, go to form
-        document.getElementById("thanks").style.display = "none";
-        document.getElementById("form").style.display = "block";
-        return;
-      }
-
-      // Reset game state
-      rounds = totalRounds;
-      playerScore = 0; compScore = 0;
-      flatResults = {};
-      currentPlayerCard = null; currentCompCard = null;
-      currentRound = 0;
-      savedOnce = false;
-      gameId = "G" + Date.now();
-
-      // Clear UI
-      document.getElementById("rounds").innerText = rounds;
-      document.getElementById("playerScore").innerText = playerScore;
-      document.getElementById("compScore").innerText = compScore;
-      document.getElementById("playerCardSlot").innerHTML = "";
-      document.getElementById("compCardSlot").innerHTML = "";
-      document.getElementById("log").innerHTML = "";
-      document.getElementById("dealBtn").style.display = "inline-block";
-      document.getElementById("choiceBtns").style.display = "none";
-
-      // Assign a new random variant
-      variant = VARIANTS[Math.floor(Math.random() * VARIANTS.length)];
-      const compMirror = -variant.deltaPlayer;
-
-      // Show rules for the new variant
-      document.getElementById("thanks").style.display = "none";
-      document.getElementById("rules").style.display = "block";
-      document.getElementById("variantName").innerText = variant.name;
-
-      const skipRule = variant.deltaPlayer === 0
-        ? "If you Skip: no points change for either player."
-        : `If you Skip: ${pointsPhrase(variant.deltaPlayer)}; the computer ${compMirror>0?"wins":"loses"} ${Math.abs(compMirror)} point${Math.abs(compMirror)===1?"":"s"}.`;
-
-      document.getElementById("variantRules").innerHTML = `
-        <p><b>Your goal:</b> Collect as many points as possible. The more points you have by the end of 20 rounds, the better your performance.</p>
-        <ul>
-          <li>The game has <b>20 rounds</b>. In each round, both you and the computer are dealt a card numbered from 1 to 10.</li>
-          <li>You will see <b>your card first</b>. Then choose whether to:
-            <ul>
-              <li><b>Play</b> — both cards are revealed.
-                <ul>
-                  <li>If your card is higher, you gain 10 points and the computer loses 10.</li>
-                  <li>If your card is lower, you lose 10 points and the computer gains 10.</li>
-                  <li>If both are equal, no points change.</li>
-                </ul>
-              </li>
-              <li><b>Skip</b> — both cards are revealed but the round is not contested.
-                <ul>
-                  <li>${skipRule}</li>
-                </ul>
-              </li>
-            </ul>
-          </li>
-          <li>Your running total score is shown after each round.</li>
-        </ul>
-        <p><b>Remember:</b> Your aim is to finish with the <u>highest possible score</u>. Every choice — Play or Skip — affects your total.</p>
-      `;
-    }
-  </script>
-</body>
-</html>
