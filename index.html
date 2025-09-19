@@ -369,3 +369,110 @@
       let colorClass = "black"; if (deltaYou > 0) colorClass = "green"; else if (deltaYou < 0) colorClass = "red";
       const line = `<div class="log-line">
         <div class="log-meta">Round ${currentRound}:</div>
+        ${makeCard(currentPlayerCard, false, true)} vs ${makeCard(currentCompCard, false, true)}
+        <span class="outcome ${colorClass}">— ${phrase}</span>
+      </div>`;
+      const log = document.getElementById("log");
+      log.innerHTML = line + log.innerHTML;
+
+      document.getElementById("choiceBtns").style.display = "none";
+      document.getElementById("dealBtn").style.display = "inline-block";
+
+      if (rounds === 0) {
+        document.getElementById("dealBtn").style.display = "none";
+        autoSaveAndThank();
+      }
+    }
+
+    // ======= AUTO-SAVE + THANK YOU =======
+    async function autoSaveAndThank() {
+      const payload = {
+        demographics: { GameID: gameId, TotalScore: playerScore, ...demographics },
+        gameRow: { GameID: gameId, ...flatResults }
+      };
+
+      if (!savedOnce) {
+        savedOnce = true;
+        try {
+          await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify(payload)
+          });
+        } catch (e) {
+          console.warn("Auto-save error:", e);
+        }
+      }
+
+      // Show Thank You + final score
+      document.getElementById("finalScore").innerText = playerScore;
+      document.getElementById("game").style.display = "none";
+      document.getElementById("finalActions").style.display = "none";
+      document.getElementById("thanks").style.display = "block";
+    }
+
+    // ======= PLAY AGAIN (reuse demographics, new variant) =======
+    function playAgain() {
+      if (!demographics || !demographics.Name) { // fallback
+        document.getElementById("thanks").style.display = "none";
+        document.getElementById("form").style.display = "block";
+        return;
+      }
+
+      // Reset game state
+      rounds = totalRounds; playerScore = 0; compScore = 0;
+      flatResults = {}; currentPlayerCard = null; currentCompCard = null; currentRound = 0; savedOnce = false;
+      gameId = "G" + Date.now();
+
+      // Reset UI
+      document.getElementById("rounds").innerText = rounds;
+      document.getElementById("playerScore").innerText = playerScore;
+      document.getElementById("compScore").innerText = compScore;
+      document.getElementById("playerCardSlot").innerHTML = "";
+      document.getElementById("compCardSlot").innerHTML = "";
+      document.getElementById("log").innerHTML = "";
+      document.getElementById("dealBtn").style.display = "inline-block";
+      document.getElementById("choiceBtns").style.display = "none";
+
+      // New random variant + rules
+      variant = VARIANTS[Math.floor(Math.random() * VARIANTS.length)];
+      setVariantBanner(document.getElementById("variantBannerRules"), variant.deltaPlayer);
+
+      const compMirror = -variant.deltaPlayer;
+      const skipRule = variant.deltaPlayer === 0
+        ? "If you Skip: no points change for either player."
+        : `If you Skip: ${pointsPhrase(variant.deltaPlayer)}; the computer ${compMirror>0?"wins":"loses"} ${Math.abs(compMirror)} point${Math.abs(compMirror)===1?"":"s"}.`;
+
+      document.getElementById("variantName").innerText = variant.name;
+      document.getElementById("variantRules").innerHTML = `
+        <p><b>Your goal:</b> Collect as many points as possible. The more points you have by the end of 20 rounds, the better your performance.</p>
+        <ul>
+          <li>The game has <b>20 rounds</b>. In each round, both you and the computer are dealt a card numbered from 1 to 10.</li>
+          <li>You will see <b>your card first</b>. Then choose whether to:
+            <ul>
+              <li><b>Play</b> — both cards are revealed.
+                <ul>
+                  <li>If your card is higher, you gain 10 points and the computer loses 10.</li>
+                  <li>If your card is lower, you lose 10 points and the computer gains 10.</li>
+                  <li>If both are equal, no points change.</li>
+                </ul>
+              </li>
+              <li><b>Skip</b> — both cards are revealed but the round is not contested.
+                <ul>
+                  <li>${skipRule}</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li>Your running total score is shown after each round.</li>
+        </ul>
+        <p><b>Remember:</b> Your aim is to finish with the <u>highest possible score</u>. Every choice — Play or Skip — affects your total.</p>
+      `;
+      document.getElementById("thanks").style.display = "none";
+      document.getElementById("rules").style.display = "block";
+      setVariantBanner(document.getElementById("variantBannerPlay"), variant.deltaPlayer);
+    }
+  </script>
+</body>
+</html>
