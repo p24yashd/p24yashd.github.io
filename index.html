@@ -139,6 +139,7 @@
   <div id="thanks">
     <h2>Thank you!</h2>
     <p>Your responses have been recorded.</p>
+    <button onclick="playAgain()">Play again</button>
   </div>
 
   <script>
@@ -197,6 +198,7 @@
     let currentRound = 0;
     let variant = null;
     let savedOnce = false;
+    let demographicsLocked = false; // becomes true after first game save
 
     function makeCard(num, hidden=false, small=false) {
       let classes = "card" + (small ? " sm" : "");
@@ -232,7 +234,7 @@
 
       demographics = { Name: name, Age: age, Gender: gender, Country: country };
 
-      // Randomly assign one of the 6 variants
+      // Randomly assign one of the variants
       variant = VARIANTS[Math.floor(Math.random() * VARIANTS.length)];
       const compMirror = -variant.deltaPlayer;
 
@@ -241,7 +243,7 @@
       document.getElementById("rules").style.display = "block";
       document.getElementById("variantName").innerText = variant.name;
 
-      // Improved rules page
+      // Rules text
       const skipRule = variant.deltaPlayer === 0
         ? "If you Skip: no points change for either player."
         : `If you Skip: ${pointsPhrase(variant.deltaPlayer)}; the computer ${compMirror>0?"wins":"loses"} ${Math.abs(compMirror)} point${Math.abs(compMirror)===1?"":"s"}.`;
@@ -321,7 +323,7 @@
 
       // Record round results (ALWAYS store player's card value)
       flatResults[`PlayerChoice${currentRound}`]  = playerPlays ? "Play" : "Skip";
-      flatResults[`PlayerCard${currentRound}`]    = currentPlayerCard;   // <<<<<< changed here
+      flatResults[`PlayerCard${currentRound}`]    = currentPlayerCard;
       flatResults[`ComputerCard${currentRound}`]  = currentCompCard;
       flatResults[`Outcome${currentRound}`]       = outcome;
 
@@ -374,6 +376,7 @@
             headers: { "Content-Type": "text/plain;charset=utf-8" },
             body: JSON.stringify(payload)
           });
+          demographicsLocked = true; // after first successful send, we consider details locked for "Play again"
         } catch (e) {
           console.warn("Auto-save error:", e);
         }
@@ -383,6 +386,74 @@
       document.getElementById("game").style.display = "none";
       document.getElementById("finalActions").style.display = "none";
       document.getElementById("thanks").style.display = "block";
+    }
+
+    // ======= PLAY AGAIN (skip demographics, reuse details) =======
+    function playAgain() {
+      // Reuse demographics as-is (must exist from first game)
+      if (!demographics || !demographics.Name) {
+        // Safety fallback: if somehow no prior demographics, go to form
+        document.getElementById("thanks").style.display = "none";
+        document.getElementById("form").style.display = "block";
+        return;
+      }
+
+      // Reset game state
+      rounds = totalRounds;
+      playerScore = 0; compScore = 0;
+      flatResults = {};
+      currentPlayerCard = null; currentCompCard = null;
+      currentRound = 0;
+      savedOnce = false;
+      gameId = "G" + Date.now();
+
+      // Clear UI
+      document.getElementById("rounds").innerText = rounds;
+      document.getElementById("playerScore").innerText = playerScore;
+      document.getElementById("compScore").innerText = compScore;
+      document.getElementById("playerCardSlot").innerHTML = "";
+      document.getElementById("compCardSlot").innerHTML = "";
+      document.getElementById("log").innerHTML = "";
+      document.getElementById("dealBtn").style.display = "inline-block";
+      document.getElementById("choiceBtns").style.display = "none";
+
+      // Assign a new random variant
+      variant = VARIANTS[Math.floor(Math.random() * VARIANTS.length)];
+      const compMirror = -variant.deltaPlayer;
+
+      // Show rules for the new variant
+      document.getElementById("thanks").style.display = "none";
+      document.getElementById("rules").style.display = "block";
+      document.getElementById("variantName").innerText = variant.name;
+
+      const skipRule = variant.deltaPlayer === 0
+        ? "If you Skip: no points change for either player."
+        : `If you Skip: ${pointsPhrase(variant.deltaPlayer)}; the computer ${compMirror>0?"wins":"loses"} ${Math.abs(compMirror)} point${Math.abs(compMirror)===1?"":"s"}.`;
+
+      document.getElementById("variantRules").innerHTML = `
+        <p><b>Your goal:</b> Collect as many points as possible. The more points you have by the end of 20 rounds, the better your performance.</p>
+        <ul>
+          <li>The game has <b>20 rounds</b>. In each round, both you and the computer are dealt a card numbered from 1 to 10.</li>
+          <li>You will see <b>your card first</b>. Then choose whether to:
+            <ul>
+              <li><b>Play</b> — both cards are revealed.
+                <ul>
+                  <li>If your card is higher, you gain 10 points and the computer loses 10.</li>
+                  <li>If your card is lower, you lose 10 points and the computer gains 10.</li>
+                  <li>If both are equal, no points change.</li>
+                </ul>
+              </li>
+              <li><b>Skip</b> — both cards are revealed but the round is not contested.
+                <ul>
+                  <li>${skipRule}</li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li>Your running total score is shown after each round.</li>
+        </ul>
+        <p><b>Remember:</b> Your aim is to finish with the <u>highest possible score</u>. Every choice — Play or Skip — affects your total.</p>
+      `;
     }
   </script>
 </body>
